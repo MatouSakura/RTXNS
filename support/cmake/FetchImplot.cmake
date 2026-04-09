@@ -35,24 +35,39 @@ if (NOT TARGET imgui)
     message(FATAL_ERROR "Implot requires imgui")
 endif()
 
-include(FetchContent)
-FetchContent_Declare(
-    implot
-    GIT_REPOSITORY https://github.com/epezent/implot.git
-    GIT_TAG v0.17
+set(RTXNS_IMPLOT_SOURCE_DIR
+    "${CMAKE_SOURCE_DIR}/external/implot"
+    CACHE PATH "Local path to implot source")
+set(RTXNS_IMPLOT_FETCH_URL
+    "https://github.com/epezent/implot.git"
+    CACHE STRING "URL used to fetch implot when no local source is present")
+set(RTXNS_IMPLOT_FETCH_TAG
+    "v0.17"
+    CACHE STRING "Git tag or commit used to fetch implot")
+
+if (EXISTS "${RTXNS_IMPLOT_SOURCE_DIR}/implot.cpp")
+    set(IMPLOT_SOURCE_DIR "${RTXNS_IMPLOT_SOURCE_DIR}")
+else()
+    include(FetchContent)
+    FetchContent_Declare(
+        implot
+        GIT_REPOSITORY ${RTXNS_IMPLOT_FETCH_URL}
+        GIT_TAG ${RTXNS_IMPLOT_FETCH_TAG}
     )
-FetchContent_MakeAvailable(implot)
+    FetchContent_MakeAvailable(implot)
+    set(IMPLOT_SOURCE_DIR "${implot_SOURCE_DIR}")
+endif()
 
 # Override Imgui build - we want a lean static library
 
 set(implot_srcs
-    ${CMAKE_BINARY_DIR}/_deps/implot-src/implot.cpp
-    ${CMAKE_BINARY_DIR}/_deps/implot-src/implot.h
-    ${CMAKE_BINARY_DIR}/_deps/implot-src/implot_internal.h
-    ${CMAKE_BINARY_DIR}/_deps/implot-src/implot_items.cpp
+    ${IMPLOT_SOURCE_DIR}/implot.cpp
+    ${IMPLOT_SOURCE_DIR}/implot.h
+    ${IMPLOT_SOURCE_DIR}/implot_internal.h
+    ${IMPLOT_SOURCE_DIR}/implot_items.cpp
 )
 
 add_library(implot STATIC ${implot_srcs})
 set_target_properties(implot PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(implot PUBLIC "${CMAKE_BINARY_DIR}/_deps/implot-src/")
+target_include_directories(implot PUBLIC "${IMPLOT_SOURCE_DIR}")
 target_link_libraries(implot imgui)
