@@ -8,10 +8,35 @@ set "BUILD_DIR=%REPO_ROOT%\build"
 set "GENERATOR=Visual Studio 17 2022"
 set "PLATFORM=x64"
 set "CONFIG=Release"
+set "SUBMODULE_SETUP=%REPO_ROOT%\setup-submodules.cmd"
 
-rem Update these two paths if your local tool locations change.
-set "DXC_PATH=D:\Tools\DXC\dxc_2025_05_24\bin\x64\dxc.exe"
-set "SLANG_PATH=D:\Tools\Slang\slang-2025.19.1-windows-x86_64\bin\slangc.exe"
+rem You can either edit these defaults or override them with environment variables.
+if not defined DXC_PATH set "DXC_PATH=D:\Tools\DXC\dxc_2025_05_24\bin\x64\dxc.exe"
+if not defined SLANG_PATH set "SLANG_PATH=D:\Tools\Slang\slang-2025.19.1-windows-x86_64\bin\slangc.exe"
+
+where cmake >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] CMake not found in PATH.
+    goto :fail
+)
+
+if not exist "%REPO_ROOT%\external\donut\CMakeLists.txt" goto :init_submodules
+if not exist "%REPO_ROOT%\external\donut\nvrhi\CMakeLists.txt" goto :init_submodules
+if not exist "%REPO_ROOT%\external\implot\implot.cpp" goto :init_submodules
+goto :submodules_ready
+
+:init_submodules
+if not exist "%SUBMODULE_SETUP%" (
+    echo [ERROR] Submodule bootstrap script not found:
+    echo         %SUBMODULE_SETUP%
+    goto :fail
+)
+
+echo [0/2] Submodules are missing. Running setup-submodules.cmd...
+call "%SUBMODULE_SETUP%"
+if errorlevel 1 goto :fail
+
+:submodules_ready
 
 if not exist "%DXC_PATH%" (
     echo [ERROR] DXC not found:
@@ -43,6 +68,8 @@ echo.
 echo Build completed successfully.
 echo Binaries:
 echo   %REPO_ROOT%\bin\windows-x64
+echo.
+echo To rebuild after shader or source changes, run this script again.
 popd
 exit /b 0
 
