@@ -1,81 +1,92 @@
-# RTX Neural Shading: SlangPy Inferencing Example
+# RTX Neural Shading：SlangPy Inferencing 示例
 
-## Purpose
+## 目的
 
-This sample demonstrates how to run neural network inference in Python using the SlangPy library, and then transition the same implementation to C++. The workflow illustrates a typical development pattern:
+这个 sample 展示了如何先在 Python 中借助 SlangPy 完成神经网络推理，再把同一套实现迁移到 C++。
 
-1. **Prototyping**: Start in Python with SlangPy for flexibility and rapid iteration.
-2. **Deployment**: Move the same Slang code to a C++ application for production use.
+它体现的是一种非常典型的工作流：
 
-By maintaining consistent Slang source code between both implementations, you can leverage Python's rapid development while achieving C++ performance in your final application. This approach minimizes code duplication and ensures consistent behavior across language boundaries.
+1. **原型阶段**：先在 Python + SlangPy 中快速试验
+2. **部署阶段**：再把同样的 Slang 代码迁移到 C++ 应用中
 
-The sample includes both Python and C++ implementations that perform the same neural network inference task, providing a clear path for transitioning between the two environments.
+因为 Python 版和 C++ 版复用了相同的 Slang 源代码，所以你既能利用 Python 的高迭代效率，也能在最终落地时获得 C++ 的性能。
+
+这个 sample 同时提供了 Python 和 C++ 两套实现，它们执行的是同一个神经网络推理任务，因此非常适合用来理解两种环境之间如何平滑迁移。
 
 <img src="slangpy_inferencing_chart.png" width="1000" alt="Transition chart">
 
-## Motivation
+## 动机
 
-Starting with SlangPy and Python's flexibility makes it easier to experiment with neural network configurations. Slang's autodiff functionality helps implement training code efficiently.
+先用 SlangPy 和 Python 做实验，会更容易调整网络配置、快速验证效果。与此同时，Slang 的 autodiff 也能让训练代码的实现更简单。
 
-Once satisfied with the results, you can deploy your trained neural implementation to a C++ graphics engine. This sample shows how to make that transition with minimal changes to your Slang neural network implementation.
+当你对结果满意后，就可以把这套神经实现迁移到 C++ 图形引擎里。这个 sample 就是为了演示：如何在尽量少改动 Slang 神经网络实现的前提下，完成这次迁移。
 
-**Key advantages of this workflow:**
+这种工作流的主要优势包括：
 
-1. **Rapid Prototyping**: Python's dynamic nature and ecosystem enable quick experimentation.
-2. **Seamless Transition**: Use the same Slang code in both environments to avoid rewriting logic.
-3. **Performance Optimization**: C++ provides the performance needed for real-time applications.
-4. **Unified Codebase**: Maintain a single source of truth for your neural network logic.
-5. **Debugging Efficiency**: Identify and fix problems in Python before deploying to C++.
+1. **快速原型验证**：Python 的动态特性和生态更适合试验
+2. **平滑迁移**：Python 和 C++ 共享同一套 Slang 逻辑，避免重复实现
+3. **更高运行性能**：最终部署时由 C++ 提供实时性能
+4. **统一代码来源**：神经网络逻辑只有一套“真实来源”
+5. **更高调试效率**：先在 Python 里定位问题，再迁移到 C++
 
-This approach is valuable for graphics and ML engineers balancing experimentation speed with runtime performance.
+对于需要在“实验速度”和“运行效率”之间平衡的图形/机器学习工程师来说，这套流程非常有价值。
 
-### Python Requirements
+### Python 依赖
 
-- Python 3.9 or newer
-- Required Python packages (installed via `requirements.txt`):
-    - SlangPy
-    - NumPy
+- Python 3.9 或更高版本
+- `requirements.txt` 中列出的 Python 包：
+  - SlangPy
+  - NumPy
 
-### Installing Required Python Modules
+### 安装所需 Python 模块
 
-In the root folder, run:
+在仓库根目录执行：
+
 ```sh
 pip install -r samples/SlangpyInferencing/requirements.txt
 ```
 
-### Running the SlangPy Sample
+### 运行 SlangPy 示例
 
-In the root folder, run:
+在仓库根目录执行：
+
 ```sh
 python samples\SlangpyInferencing\SlangpyInferencing.py
 ```
-This launches the SlangPy sample, showing the original picture, inferred picture, and amplified error image.
+
+运行后会打开一个窗口，展示：
+
+- 原始图像
+- 推理结果图像
+- 放大的误差图
 
 <img src="slangpy_inferencing_window.png" width="800" alt="SlangPy Inferencing Steps">
 
-## SlangPy Inferencing Overview
+## SlangPy 推理概览
 
-The Python sample uses the SlangPy library to call GPU code written in Slang from Python. For more details, see the [official documentation](https://SlangPy.readthedocs.io/en/latest/). Below is a brief overview.
+Python 版 sample 使用 SlangPy 去调用用 Slang 编写的 GPU 代码。更详细内容可以参考 [官方文档](https://SlangPy.readthedocs.io/en/latest/)，这里仅做简要说明。
 
 <img src="slangpy_inferencing_steps.png" width="600" alt="SlangPy Inferencing Steps">
 
-### Architecture Overview
+### 架构概览
 
-#### Device Setup and Loading Slang Source Code
+#### 设备初始化与 Slang 源码加载
 
-Create a window with an attached `Device` object using the `App` class from `app.py`:
+首先通过 `app.py` 里的 `App` 类创建一个带 `Device` 的窗口：
+
 ```python
 app = App(width=512*3+10*2, height=512, title="Mipmap Example", device_type=spy.DeviceType.vulkan)
 ```
 
-Load a Slang module:
+然后加载一个 Slang 模块：
+
 ```python
 module = spy.Module.load_from_file(app.device, "SlangpyInferencing_pyslang.slang")
 ```
 
-#### Neural Network Data Structures
+#### 神经网络数据结构
 
-In Python, the neural network is represented by the `Network` structure:
+在 Python 侧，神经网络由 `Network` 结构来表示：
 
 ```python
 class Network(spy.InstanceList):
@@ -87,7 +98,8 @@ class Network(spy.InstanceList):
         self.layer2 = NetworkParameters(data['layers'][2])
 ```
 
-On the Slang side:
+对应的 Slang 侧定义如下：
+
 ```c++
 struct Network {
     NetworkParameters<16, 32>  layer0;
@@ -97,7 +109,7 @@ struct Network {
     float3 eval(no_diff float2 uv)
 ```
 
-The Python `NetworkParameters` class converts weights and biases to a cooperative vector layer. The Slang source implements a `forward` method for a single layer:
+Python 里的 `NetworkParameters` 负责把权重和偏置转换成 cooperative vector 层。Slang 侧则为单层网络实现了 `forward`：
 
 ```c++
 struct NetworkParameters<int Inputs, int Outputs>
@@ -119,15 +131,16 @@ struct NetworkParameters<int Inputs, int Outputs>
 }
 ```
 
-#### Inference
+#### 推理过程
 
-Load weights and biases from a JSON file and create a `Network` instance:
+先从 JSON 文件加载权重和偏置，然后创建一个 `Network` 实例：
+
 ```python
 trained_weights = json.load(open(AssetsPath / 'weights.json'))
 network = Network(trained_weights)
 ```
 
-In the main loop, display the original picture, call inference and loss functions from Slang, and blit result images:
+在主循环里，程序会显示原图、调用 Slang 中的推理与 loss 函数，然后把输出结果 blit 到窗口上：
 
 ```python
 while app.process_events():
@@ -153,19 +166,19 @@ while app.process_events():
     app.present()
 ```
 
-## C++ Inferencing Overview
+## C++ 推理概览
 
-The C++ implementation is designed for optimal performance in production. While SlangPy is excellent for prototyping, C++ provides the performance needed for real-time applications.
+C++ 版本面向最终部署，目标是获得更高性能。SlangPy 非常适合原型开发，而 C++ 更适合实时应用。
 
-The C++ version uses the `donut` graphics engine and reuses the same Slang source code as the Python version.
+C++ 版基于 `donut` 图形框架，并复用了与 Python 版相同的 Slang 代码。
 
 <img src="slangpy_inferencing_steps_cpp.png" width="600" alt="C++ Inferencing Steps">
 
-### Adding Slang to the Build System
+### 把 Slang 接进构建系统
 
-In Python, SlangPy loads and compiles Slang code. In C++, use the `slangc` compiler to produce binaries for DX12 and Vulkan.
+在 Python 里，SlangPy 会自动加载并编译 Slang 代码；而在 C++ 中，则要通过 `slangc` 把 shader 编译成 DX12 / Vulkan 可执行二进制。
 
-Integrate Slang compilation into your build system:
+典型做法是把 Slang 编译过程集成到 CMake 里：
 
 ```cmake
 include(../../external/donut/compileshaders.cmake)
@@ -190,18 +203,19 @@ donut_compile_shaders_all_platforms(
 )
 ```
 
-Define entry points for Slang shaders in `shaders.cfg`:
+对应的 `shaders.cfg` 中，需要定义 Slang shader 的入口点：
+
 ```
 SlangpyInferencing_cpp.slang -E inference_cs -T cs
 ```
 
-### Initializing Cooperative Vector Support
+### 初始化 Cooperative Vector 支持
 
-To use cooperative vector operations, you must enable the appropriate features for your graphics API:
+如果要使用 cooperative vector，就必须在当前图形 API 上打开相关能力。
 
 #### DirectX 12
 
-Enable experimental shader models and cooperative vector support:
+要启用实验性 shader model 和 cooperative vector 支持：
 
 ```c++
 UUID features[] = { D3D12ExperimentalShaderModels, D3D12CooperativeVectorExperiment };
@@ -210,15 +224,15 @@ HRESULT hr = D3D12EnableExperimentalFeatures(_countof(features), features, nullp
 
 #### Vulkan
 
-Require the cooperative vector extension during device initialization:
+在创建设备时，把 cooperative vector 扩展加入必需扩展列表：
 
 ```c++
 deviceParams.requiredVulkanDeviceExtensions.push_back(VK_NV_COOPERATIVE_VECTOR_EXTENSION_NAME);
 ```
 
-### Neural Network Parameters Loading
+### 加载神经网络参数
 
-Load neural network parameters from the same JSON file as the Python version:
+C++ 版和 Python 版一样，都会从同一个 JSON 文件读取网络参数：
 
 ```c++
 m_networkUtils = std::make_shared<rtxns::NetworkUtilities>(GetDevice());
@@ -235,9 +249,12 @@ assert(m_neuralNetwork->GetNetworkLayout().networkLayers.size() == 3);
 m_deviceNetworkLayout = m_networkUtils->GetNewMatrixLayout(m_neuralNetwork->GetNetworkLayout(), rtxns::MatrixLayout::InferencingOptimal);
 ```
 
-### GPU Buffers Allocation and Parameters Conversion
+### GPU Buffer 分配与参数转换
 
-Create buffers for the original and cooperative vector layouts:
+首先要创建两套 buffer：
+
+- 一套保存原始 host layout
+- 一套保存 cooperative vector 可直接使用的 device-optimal layout
 
 ```c++
 const auto& params = m_neuralNetwork->GetNetworkParams();
@@ -261,7 +278,7 @@ paramsBufferDesc.initialState = nvrhi::ResourceStates::UnorderedAccess;
 m_mlpDeviceBuffer = GetDevice()->createBuffer(paramsBufferDesc);
 ```
 
-Upload parameters and convert to the GPU-optimized layout:
+然后上传 host 参数，并转换成 GPU 优化布局：
 
 ```c++
 // Upload the host side parameters
@@ -280,7 +297,7 @@ m_commandList->commitBarriers();
 
 ### Compute Shader
 
-In Python, SlangPy handles compute shader and bindings. In C++, manually implement the compute shader to call `inference` and `loss`:
+在 Python 版中，SlangPy 会自动处理 compute shader 和 binding；而在 C++ 版中，你需要自己写 compute shader，明确调用 `inference` 和 `loss`：
 
 ```c++
 DECLARE_CBUFFER(NeuralConstants, gConst, 0, 0);
@@ -300,7 +317,7 @@ void inference_cs(uint3 pixel: SV_DispatchThreadID)
 }
 ```
 
-Add bindings to the `Network` structure:
+为了让 `Network` 结构能拿到参数，需要给它加入合适的 binding：
 
 ```c++
 struct NetworkParameters<int Inputs, int Outputs, int WeightReg, int BiasReg>
@@ -327,7 +344,7 @@ struct Network {
     NetworkParameters<32, 3, 4, 5>  layer2;
 ```
 
-On the C++ side, all neural network parameters are stored in a single buffer. Bind different ranges of the buffer to the Slang side:
+C++ 侧通常把所有神经网络参数都打包在一个总 buffer 中，因此需要把这块大 buffer 按不同 range 绑定到 Slang 侧：
 
 ```c++
 nvrhi::BindingSetDesc bindingSetDesc;
@@ -349,7 +366,7 @@ bindingSetDesc.bindings = {
 nvrhi::utils::CreateBindingSetAndLayout(GetDevice(), nvrhi::ShaderType::All, 0, bindingSetDesc, m_BindingLayout, m_BindingSet);
 ```
 
-Dispatch the compute shader for the output texture size:
+最后，对输出纹理大小范围执行 compute dispatch：
 
 ```c++
 nvrhi::ComputeState state;
@@ -363,10 +380,16 @@ m_commandList->dispatch(dm::div_ceil(m_InferenceTexture->getDesc().width, 8), dm
 m_commandList->endMarker();
 ```
 
-### Running the C++ Sample
+### 运行 C++ 示例
 
-To run the C++ sample, build the solution and execute the `SlangpyInferencing` executable. This launches a window similar to the Python version, showing the original image, inferred output, and error visualization.
+要运行 C++ 版 sample，只需要构建工程并执行 `SlangpyInferencing`。
 
-The C++ version uses the same neural network weights and produces visually identical results to the Python implementation, while benefiting from native code performance.
+运行后会看到一个与 Python 版类似的窗口，展示：
+
+- 原始图像
+- 神经推理结果
+- 误差可视化
+
+C++ 版使用与 Python 版完全相同的网络权重，并会得到视觉上一致的结果，只是运行在原生代码路径上，性能更高。
 
 <img src="slangpy_inferencing_window_cpp.png" width="800" alt="C++ Inferencing Window">

@@ -1,30 +1,36 @@
-# RTX Neural Shading: Simple Inferencing Example
+# RTX Neural Shading：Simple Inferencing 示例
 
-## Purpose
+## 目的
 
-This sample demonstrates how to implement an inference shader using some of the low-level building blocks from RTXNS. The sample loads a trained network from a file and uses the network to approximate a Disney BRDF shader. The sample is interactive; the light source can be rotated and various material parameters can be modified at runtime.
+这个 sample 用来展示如何基于 `RTXNS` 提供的一些底层构件实现一个推理 shader。
+
+它会：
+
+- 从文件中加载一个已经训练好的网络
+- 使用这个网络去近似 Disney BRDF shader
+- 在运行时允许你交互调整光源和部分材质参数
 
 ![Simple Inferencing Output](simple_inferencing.png)
 
-When the executable is built and run, the output shows a lit sphere using the neural network to approximate a Disney BRDF shader.
+可执行文件构建并运行后，窗口中会显示一个被照亮的球体，着色部分由神经网络来近似 Disney BRDF。
 
-## Inference Flow
+## 推理流程
 
-To load an inference neural network with RTXNS, several stages are needed which will be described in more detail below.
+在 `RTXNS` 中加载一个推理用神经网络，通常需要经历以下几个阶段：
 
-1. Create the host side neural network storage and initialize it
+1. 创建 host 侧神经网络存储并初始化
+2. 创建一份 GPU 侧拷贝，并用 host 侧参数填充
+3. 在正常渲染循环中，用推理代码替换 Disney shader 的核心部分来给球体着色
 
-2. Create a GPU copy of the storage and initialize it with the host copy
+## 应用层代码
 
-3. Run the normal render loop calling the inference code instead of the disney shader to shade the sphere.
+Host 侧对神经网络的创建和使用其实比较直接，主要依赖 `RTXNS` 封装在图形 API Cooperative Vector 之上的一些抽象。
 
-## Application Code
+### 创建网络
 
-On the host, the setup and running of the neural network is quite simple and uses our RTXNS abstractions that are layered on top of the Graphics API Cooperative Vector extensions.
+这里会创建一个 `rtxns::Network`，并从文件中初始化。
 
-### Network Creation
-
-A `rtxns::Network` is created and initialized from a file. To ensure platform portability, the network should be stored in a non GPU-optimized format, such as `rtxns::MatrixLayout::RowMajor` and then later converted to a GPU optimized layout on the device, as shown in the following code.
+为了保持跨平台可移植性，网络文件应当保存为非 GPU 优化格式，例如 `rtxns::MatrixLayout::RowMajor`，之后再在当前设备上转换成 GPU 优化布局：
 
 ```
  m_networkUtils = std::make_shared<rtxns::NetworkUtilities>(GetDevice());
@@ -39,14 +45,27 @@ if (!net.initializeFromFile(GetLocalPath("assets/data").string() + std::string("
 rtxns::NetworkLayout deviceNetworkLayout = m_networkUtils->GetNewMatrixLayout(hostNetwork.GetNetworkLayout(), rtxns::MatrixLayout::InferencingOptimal);
 ```
 
-This will load the network definition and parameters from the file, allocate a contiguous block of host memory for the parameters (weights and biases per layer), set the parameters from the file. At the same time we create a GPU optimal layout, `rtxns::MatrixLayout::InferencingOptimal`. Under the hood, this will use the `CoopVector` extensions to query the size of the allocations and perform the layout conversions.
+这段代码会：
 
-### GPU Buffer Allocations
+- 从文件里读取网络定义和参数
+- 为每层权重和偏置分配一块连续的 host 内存
+- 用文件中的数据填充这些参数
+- 同时创建一个 GPU 侧优化布局 `rtxns::MatrixLayout::InferencingOptimal`
 
-#### Float16 Parameter Buffer
-Two parameter buffers are required, the first for the host layout and the second for device optimal layout. The parameter buffers contains all of the weights and biases for the network stored at a suitable precision, such as float16.
+底层会借助 `CoopVector` 扩展去查询矩阵实际大小，并完成布局转换。
 
-Once the host layout buffer is populated we can convert to the device layout. This will be used directly in the inferencing shaders as input to the Slang CoopVector functions.
+### GPU Buffer 分配
+
+#### Float16 参数 Buffer
+
+这里需要两份参数 buffer：
+
+- 一份保存 host layout
+- 一份保存 device-optimal layout
+
+这两份 buffer 中存放的都是网络所有层的权重和偏置，通常使用 `float16` 精度。
+
+当 host layout buffer 填充完成后，就可以把它转换成 device layout。后者会在推理 shader 中直接作为 Slang CoopVector 函数的输入。
 
 ```
 // Create a buffer for the host side weight and bias parameters
@@ -73,13 +92,13 @@ m_networkUtils->ConvertWeights(hostNetwork.GetNetworkLayout(), deviceNetworkLayo
 
 ```
 
-### Render Loop
+### 渲染循环
 
-In this sample, the inference shader code is called directly from the pixel shader, so the render loop requires no modification apart from ensuring the parameter buffer is correctly bound.
+在这个 sample 中，推理 shader 逻辑直接从 pixel shader 内调用，因此渲染循环几乎不需要额外修改，只要确保参数 buffer 正确绑定即可。
 
-## Shader Code
+## Shader 代码
 
-As previously stated, this sample is designed to use a neural network to approximate the Disney BRDF shader. For reference, the shader code calling the Disney shader might look like this :
+正如前面提到的，这个 sample 的目标是用神经网络去近似 Disney BRDF shader。作为对照，调用 Disney shader 的代码大致会是这样：
 
 ```
 void main_ps(float3 i_norm, float3 i_view, out float4 o_color : SV_Target0)
@@ -107,11 +126,11 @@ void main_ps(float3 i_norm, float3 i_view, out float4 o_color : SV_Target0)
 }
 ```
 
-We aim to swap out the `DisneyBRDF()` function to replace it with the neural network variant `DisneyMLP`. The rest of the code should not change.
+我们的目标是只替换掉 `DisneyBRDF()` 这一段，把它换成神经网络版本 `DisneyMLP`，其余着色代码尽量保持不变。
 
-### Network Configuration
+### 网络配置
 
-The size of the neural network can be discovered from the file it is loaded from, but for simplicity it is also hardcoded into [NetworkConfig.h](../samples/SimpleInferencing/NetworkConfig.h) which is shared by the application and shader code:
+神经网络的实际大小也可以从模型文件中读取出来，但为了简化示例，它也被硬编码在 [NetworkConfig.h](../samples/SimpleInferencing/NetworkConfig.h) 中，并在应用和 shader 之间共享：
 
 ```
 #define VECTOR_FORMAT half
@@ -123,52 +142,61 @@ The size of the neural network can be discovered from the file it is loaded from
 #define HIDDEN_NEURONS 32
 ```
 
-This network therefore contains 30 input neurons (5 input features encoded into 6 input parameters per feature), generates 4 output neurons and there are 32 neurons in each hidden layer. Each neuron supports float16 precision.
+因此这个网络当前的结构是：
 
-### Input Parameters
+- 输入神经元：30 个
+- 输出神经元：4 个
+- 每层隐藏层神经元：32 个
+- 精度：`float16`
 
-The Disney BRDF model used in this example encodes the inputs into the 0-1 frequency domain which is preferred by neural networks. 
+### 输入参数
+
+当前这个 Disney BRDF 模型会先把输入编码到 `0-1` 的频率域中，这通常更适合神经网络处理：
 
 ```
   float params[INPUT_FEATURES] = { NdotL, NdotV, NdotH, LdotH, roughness };
   inputParams = rtxns::EncodeFrequency<half, INPUT_FEATURES>(params);
 ```
 
-### Inference Shader
+### 推理 Shader
 
-The inference shader uses the native slang `CoopVec` class. This is used to map the neural network weights and biases to the hardware (tensor core) in a cooperative vector form. More detail on the `CoopVec` class can be found in our [Library Guide](LibraryGuide.md), but we shall perform a quick introduction here.
+推理 shader 使用的是原生 Slang `CoopVec` 类型。它用 cooperative vector 的形式把神经网络的权重和偏置映射到底层硬件（例如 tensor core）。更完整的 `CoopVec` 说明可以参考 [Library Guide](LibraryGuide.md)，这里先做一个简要介绍。
 
 ```
   CoopVec<VECTOR_FORMAT, INPUT_NEURONS> inputParams;
 ```
 
-The above code declares a native CoopVec type of size `INPUT_NEURONS` using precision format `VECTOR_FORMAT`. We know from the previous `#defines` that in this sample, these map to :
+这段代码声明了一个长度为 `INPUT_NEURONS`、精度为 `VECTOR_FORMAT` 的 `CoopVec`。
+
+结合前面的宏定义，这里实际对应的是：
 
 ```
   CoopVec<half, 30> inputParams;
 ```
 
-There may be implementation specific size constraints on the underlying vector size (multiples of 32), but the Slang CoopVec objects can be created with arbitrary sizes and the compiler will pad as required. Conceptually, these CoopVec objects are equivalent to pytorch tensors and each layer in the neural network will take a cooperative vector as input and produce one as output. The input/output vectors may be different sizes. 
+底层实现可能对向量大小有硬件限制，例如要求按 32 对齐，但 Slang 的 `CoopVec` 可以按逻辑大小创建，编译器会根据需要自动补齐。概念上，这些 `CoopVec` 很像 PyTorch 里的 tensor：每层网络以 cooperative vector 为输入，再输出另一个 cooperative vector。
 
-To execute the inference model, the `rtxns` functions are used with templated parameters to perform the forward propagation of the input cooperative vectors through the network.  For instance, the `LinearOp` function shown below will perform linear regression of the `INPUT_NEURONS` to the  `OUTPUT_NEURONS` using the precision format `VECTOR_FORMAT`. This is equivalent to `torch.nn.Linear` from pytorch.
+为了执行推理模型，这里使用 `rtxns` 命名空间中的模板函数，把输入 cooperative vector 按层前向传播 through 网络。例如下面的 `LinearOp`，会把大小为 `INPUT_NEURONS` 的输入线性映射到 `HIDDEN_NEURONS`：
 
 ```
 hiddenParams = rtxns::LinearOp<VECTOR_FORMAT, HIDDEN_NEURONS, INPUT_NEURONS>(...)
 ```
 
-The `LinearOp` function is a convenience wrapper located in [LinearOps.slang](../src/NeuralShading_Shaders/LinearOps.slang), built upon the native `CoopVec` interface to performs a simple matrix multiply add. The underlying function is shown below:
+它可以理解成类似 `torch.nn.Linear` 的操作。
+
+`LinearOp` 定义在 [LinearOps.slang](../src/NeuralShading_Shaders/LinearOps.slang) 中，本质上是对原生 `CoopVec` 接口的一层便利封装。它底层最终调用的是：
 
 ```
 coopVecMatMulAdd<Type, Size>(...)
 ```
 
-Following the linear regression, an activation function is typically called. In this example. we use `relu`  from the `rtxns` namespace located in [CooperativeVectorFunctions.slang](../src/NeuralShading_Shaders/CooperativeVectorFunctions.slang).
+在线性层之后，通常还要接激活函数。这个例子里使用的是 `rtxns` 命名空间中的 `relu`，实现位于 [CooperativeVectorFunctions.slang](../src/NeuralShading_Shaders/CooperativeVectorFunctions.slang)：
 
 ```
 hiddenParams = rtxns::relu(hiddenParams);
 ```
 
-The linear regression and activation functions are called for each of the 4 layers of the network (1 input and 3 hidden). The final output is a `float4` containing the result of the Disney approximation to be used when calculating the final color :
+这套线性层 + 激活函数的流程会对网络的 4 层依次执行（1 层输入到隐藏层、3 层后续过渡）。最终输出是一个 `float4`，表示 Disney BRDF 近似结果，用于后续颜色计算：
 
 ```
 CoopVec<VECTOR_FORMAT, INPUT_NEURONS> inputParams;
@@ -204,9 +232,9 @@ outputParams = exp(outputParams);
 return float4(outputParams[0], outputParams[1], outputParams[2], outputParams[3]);
 ```
 
-### Final Colour
+### 最终颜色计算
 
-Once the network has produced the 4 values, these are passed directly into the remainder of the shading code :
+一旦网络输出了这 4 个值，它们就会直接接回后续普通着色代码中：
 
 ```
 float3 Cdlin = float3(pow(baseColor[0], 2.2), pow(baseColor[1], 2.2), pow(baseColor[2], 2.2));
@@ -218,7 +246,7 @@ o_color = float4(colorh, 1.f);
 
 ```
 
-### Full Code
+### 完整代码
 
 ```
 float4 DisneyMLP(float NdotL, float NdotV, float NdotH, float LdotH, float roughness)
@@ -294,4 +322,4 @@ void main_ps(
  }
 ```
 
-When compared with the original shader at the top of this section, it is clear that the only change is the original `DisneyBRDF()` function has been swapped out and replaced with the execution of the neural network in `DisneyMLP()`.
+和本节开头的原始 shader 对比起来，唯一真正变化的地方，就是把原始的 `DisneyBRDF()` 替换成了神经网络执行函数 `DisneyMLP()`。

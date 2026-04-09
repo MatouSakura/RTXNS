@@ -1,60 +1,113 @@
-# RTX Neural Shading: How to Write Your First Neural Shader
+# RTX Neural Shading：如何编写你的第一个 Neural Shader
 
-## Purpose
+## 目的
 
-Using  [Shader Training](ShaderTraining.md) as the basis of this tutorial, we will briefly discuss an approach to writing your first neural shader.
+这份教程以 [Shader Training](ShaderTraining.md) 为基础，简要说明如何开始编写你自己的 neural shader。
 
-The main areas we will focus on are :
+我们重点关注三个方面：
 
-1. Extracting the key features from the shader to be trained
+1. 如何从待训练的 shader 中提取关键特征
+2. 如何调整网络配置
+3. 如何修改激活函数和 loss 函数
 
-2. Modifying the network configuration
+这份文档不会展开讲 AI 训练和优化算法本身，而是聚焦于如何基于现有 sample 来配置并训练不同内容的网络。
 
-3. Modifying the activation and loss functions
+## 提取训练输入中的关键特征
 
-It is outside the scope of this document to discuss how AI training and optimization works and instead we will focus on modifying the existing sample to configure and train the network with different content.
+在把 Disney BRDF 接入 [Shader Training](ShaderTraining.md) 示例时，第一步其实是做特征提取。也就是说：
 
-## Extracting the Key Features for Training Input
+- 哪些特征应该交给网络去拟合
+- 哪些特征仍然保留在普通 shader 逻辑里计算
 
-When implementing the Disney BRDF for use in the [Shader Training](ShaderTraining.md) example, the first task was feature extraction. Which features from the shader should be inferred from the network and which should be calculated to ensure the network is not over specialized or overly complex. The network for the Disney BRDF takes inputs such as the `view`, `light` and `normal` vectors as well as  `material roughness`. Other variables, such as `light intensity`, `material metallicness` and various `material color` components have been left as part of the shader. This is a balancing act which may require some experimentation.
+这样做的目标，是避免网络过度专门化，也避免模型变得不必要地复杂。
 
-Once the key features are identified as potential training inputs, look to optimize them where possible by reducing their form and scaling them to be in the range `0-1` or `-1 - 1` which is preferred by networks. In the Disney BRDF, this was done by recognizing that the input vectors where always normalized and used in their dot product form, so the inputs were reduced from 3 `float3` vectors, to 4 `float` dot products.
+Disney BRDF 示例里，网络输入包含：
 
-Next, the network inputs may benefit from encoding which research has shown to improve the performance of the network. The library provides 2 encoders, `EncodeFrequency` and `EncodeTriangle` which encode the inputs into some form of wave function. The shader training example uses the frequency encoder which increases the number of inputs by a factor of 6 but provides a better network as a result. You should experiment with encoders to find the one suitable for your dataset.
+- `view`
+- `light`
+- `normal`
+- `material roughness`
 
-At this point, you should know the number of (encoded) input parameters and output parameters, so it is time to configure the network.
+而下面这些量则仍然保留在普通 shader 中：
 
-## Modifying the Network Configuration
+- `light intensity`
+- `material metallicness`
+- 各类材质颜色分量
 
-The network configuration is stored in [NetworkConfig.h](../samples/ShaderTraining/NetworkConfig.h), and may require modification. Some elements are fixed for your dataset, like the input and output neuron counts and others are available for configuration. In the provided samples, the configuration is hard-coded for ease of understanding, but in a production system they are fully expected to be a configurable part of the training pipeline.
+这本身是一个需要反复试验的权衡过程。
 
-These are fixed configuration parameters that are directly tied to the shader you are trying to train from :
+在确定哪些量适合作为训练输入后，下一步是尽量优化它们的表示形式：
 
-- `INPUT_NEURONS` should equal the number of encoded input parameters from above that are directly passed into the network.
+- 尽量减少输入维度
+- 尽量缩放到 `0-1` 或 `-1 - 1` 区间
 
-- `OUTPUT_NEURONS` should equal the output parameters that the network generates. This may be an RGB triple, or just a number of unconnected outputs like for the DisneyBRDF.
-  
-The following parameters are available for experimentation and should be modified to find suitable settings for the network you are trying to train :
+因为神经网络通常更偏好这种数值范围。
 
-- `NUM_HIDDEN_LAYERS` - The number of hidden layers that make up the network.
+在 Disney BRDF 中，这一步的做法是利用一个事实：
 
-- `HIDDEN_NEURONS` - The number of neurons in the hidden layers of the network. Changing this can make significant differences to the accuracy and cost of your network.
+- 输入向量本身总是归一化的
+- 实际最终使用的是它们之间的点积
 
-- `LEARNING_RATE` - This should be tuned to improve convergence of your model.
-  
-In future versions of the library, precision of the neurons may be alterable which could change the quality and performance of the network. The current version is fixed to `float16`.
+因此输入就从 3 个 `float3` 向量，简化成了 4 个 `float` 标量点积。
 
-Changing any of these parameters should not require any further code changes as the defines are shared amongst the C++ and shader code; they will just require a re-compile.  The exception may be when changing the size of input/output `CoopVecs`  and any code that dereferences their elements directly, such as :
+接下来，网络输入通常还可以进一步做编码。很多研究表明，这一步能显著提升网络表现。当前库提供了两个编码器：
+
+- `EncodeFrequency`
+- `EncodeTriangle`
+
+它们都会把输入编码成某种波形形式。
+
+`ShaderTraining` 示例使用的是 frequency encoder。它会把输入维度扩大 6 倍，但通常能换来更好的拟合效果。你应该根据自己的数据集去试验不同编码方式。
+
+当你已经知道：
+
+- 编码后的输入维度
+- 输出维度
+
+就可以开始配置网络了。
+
+## 修改网络配置
+
+网络配置位于 [NetworkConfig.h](../samples/ShaderTraining/NetworkConfig.h) 中，通常需要按你的任务进行调整。
+
+有些参数基本是由数据集直接决定的，比如输入和输出维度；另一些参数则需要实验来找到合适配置。
+
+在 sample 里，这些配置为了易懂都被硬编码了，但在真正的生产环境里，它们理应成为训练流水线中的可配置项。
+
+下面这些参数基本是由你要训练的 shader 任务直接决定的：
+
+- `INPUT_NEURONS`
+  应该等于编码后真正送进网络的输入维度
+- `OUTPUT_NEURONS`
+  应该等于网络输出维度，比如 RGB 三通道，或者像 Disney BRDF 那样的若干独立输出量
+
+下面这些参数则更适合拿来实验：
+
+- `NUM_HIDDEN_LAYERS`
+  网络隐藏层数
+- `HIDDEN_NEURONS`
+  每层隐藏层神经元数量，这会显著影响模型精度和运行成本
+- `LEARNING_RATE`
+  需要调参以改善收敛速度和稳定性
+
+未来库版本可能会支持更多精度配置，从而进一步影响质量和性能。当前版本固定为 `float16`。
+
+只要这些参数通过宏在 C++ 和 shader 里共享，那么修改它们通常不需要额外改逻辑代码，只需要重新编译。唯一的例外是：
+
+- 如果你修改了输入或输出 `CoopVec` 的大小
+- 并且代码里有直接按下标访问元素的逻辑
+
+比如：
 
 ```
 float4 predictedDisney = { outputParams[0], outputParams[1], outputParams[2], outputParams[3] };
 ```
 
-As always, experimentation will be required to find the right set of configuration parameters for the optimal training of your network.
+总之，真正找到适合你任务的网络配置，还是要依赖实验。
 
-## Modifying the Activation and Loss Functions
+## 修改激活函数与 Loss 函数
 
-The Simple Shading example uses the `TrainingMLP` which abstracts much of the training shader code for the user :
+Simple Shading 示例使用的是 `TrainingMLP`，它已经帮你封装掉大量训练 shader 中的重复逻辑：
 
 ```
 var model = rtxns::mlp::TrainingMLP<half, 
@@ -71,25 +124,41 @@ var finalActivation = rtxns::mlp::ExponentialAct<half, OUTPUT_NEURONS>();
 var outputParams = model.forward(inputParams, hiddenActivation, finalActivation);
 ```
 
-The activation functions are passed into the models forward and backward pass (`ReLUAct` and `ExponentialAct`) for use with the `TrainingMLP` and `InferenceMLP`. These can be found in [CooperativeVectorFunctions.slang](../src/NeuralShading_Shaders/CooperativeVectorFunctions.slang) and extended as necessary. The current version of RTXNS provides a limited set of activation functions, but these can be examined and modified to support more activation functions as required.
+这里的激活函数 `ReLUAct` 和 `ExponentialAct` 会在 `TrainingMLP` 和 `InferenceMLP` 的前向、后向过程中被使用。相关实现位于：
 
-The choice of loss function to use will be dependent on your dataset. The Simple Training example uses a simple L2 loss function whereas the Shader Training example uses a more complex L2 relative loss function. Any loss function can be trivially coded in slang to help tune your shader.
+- [CooperativeVectorFunctions.slang](../src/NeuralShading_Shaders/CooperativeVectorFunctions.slang)
 
-## Hyper Parameters
+如果你需要更多激活函数，可以在这里继续扩展。
 
-These are some of the hyper parameters that are available for tuning for your dataset.
+Loss 函数的选择则依赖你的数据集：
 
-| Parameter                   | Value            |
-| --------------------------- | ---------------- |
-| HIDDEN_NEURONS              | 32               |
-| NUM_HIDDEN_LAYERS           | 3                |
-| LEARNING_RATE               | 1e-2f            |
-| BATCH_SIZE                  | (1 << 16)        |
-| BATCH_COUNT                 | 100              |
-| Hidden Activation Functions | ReLUAct()        |
-| Final Activation Functions  | ExponentialAct() |
-| Loss Function               | L2Relative()     |
+- `Simple Training` 使用的是简单的 L2 loss
+- `Shader Training` 使用的是更复杂的 L2 relative loss
 
-## Summary
+在 Slang 中实现自定义 loss 并不难，因此你可以根据任务需要继续扩展。
 
-The Shader Training sample is a good place to start to train your own neural shader. It will require some thought as to how to decompose your shader into network inputs and shader inputs and then the network can be re-configured through experimentation to find the suitable model that can handle your dataset.
+## 超参数
+
+下面是当前 sample 中一组可调的超参数示例：
+
+| 参数 | 数值 |
+| ---- | ---- |
+| HIDDEN_NEURONS | 32 |
+| NUM_HIDDEN_LAYERS | 3 |
+| LEARNING_RATE | 1e-2f |
+| BATCH_SIZE | (1 << 16) |
+| BATCH_COUNT | 100 |
+| Hidden Activation Functions | ReLUAct() |
+| Final Activation Functions | ExponentialAct() |
+| Loss Function | L2Relative() |
+
+## 总结
+
+如果你想训练自己的 neural shader，`Shader Training` 是当前仓库里最好的起点。
+
+你需要先想清楚：
+
+- shader 中哪些部分适合拆成网络输入
+- 哪些部分仍然应该保留在常规 shader 逻辑里
+
+然后再通过实验不断调整网络结构、激活函数、loss 和超参数，找到适合你任务的模型。

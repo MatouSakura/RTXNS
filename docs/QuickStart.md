@@ -1,76 +1,82 @@
-# RTX Neural Shading: Quick Start Guide
-RTX Neural Shading can be build and run on both Windows and Linux
+# RTX Neural Shading：快速开始指南
 
-## Build steps
+RTX Neural Shading 可以在 Windows 和 Linux 上构建并运行。
 
-1. Clone the project recursively:
-   
-   ```
-   git clone --recursive https://github.com/NVIDIA-RTX/RTXNS
+## 构建步骤
+
+1. 递归克隆项目：
+
+   ```sh
+   git clone --recursive https://github.com/MatouSakura/RTXNS.git
    ```
 
-2. Create a build directory:
-   
-   ```
+2. 创建构建目录：
+
+   ```sh
    cd RTXNS
    mkdir build
-
    ```
-3. Configure the build using your preferred CMake generator.
 
-   ```
+3. 使用你偏好的 CMake 生成器配置项目：
+
+   ```sh
    cmake -S . -B build -G <generator>
    ```
 
-   To enable the DX12 Cooperative Vector preview set the option `ENABLE_DX12_COOP_VECTOR_PREVIEW` on (Windows only).
-   ```
+   如果要启用 DX12 Cooperative Vector 预览功能，请打开 `ENABLE_DX12_COOP_VECTOR_PREVIEW` 选项（仅 Windows）：
+
+   ```sh
    cmake -DENABLE_DX12_COOP_VECTOR_PREVIEW=ON
    ```
 
-4. Open build/RtxNeuralShading.sln in Visual Studio and build all projects, or build using the CMake CLI:
-   
-   ```
+4. 打开 `build/RtxNeuralShading.sln`，在 Visual Studio 中构建所有项目；也可以直接使用 CMake 命令行：
+
+   ```sh
    cmake --build build --config Release
-
    ```
 
-5. All of the sample binaries can be found in `/bin` such as
-   
-   ```
+5. 所有 sample 的可执行文件都会输出到 `/bin` 下，例如：
+
+   ```sh
    bin/<platform>/SimpleInferencing
    ```
 
-6. The samples can be launched as either DX12 or Vulkan where supported with the respective commandline: `-dx12` or `-vk` 
+6. 支持的平台上，sample 可以通过命令行参数选择 DX12 或 Vulkan：
 
-## About
+   - `-dx12`
+   - `-vk`
 
-All of the samples are built using Slang and can be compiled to either DX12 or Vulkan using DirectX Preview Agility SDK or Vulkan Cooperative Vector extension respectively. 
+## 说明
 
-- [DirectX Preview Agility SDK](https://devblogs.microsoft.com/directx/directx12agility/).
-- [Vulkan Cooperative Vector extension](https://registry.khronos.org/vulkan/specs/latest/man/html/VK_NV_cooperative_vector.html).
+所有 sample 都使用 Slang 编写，并可分别编译到 DX12 或 Vulkan：
 
-## Driver Requirements
-- Using the DirectX Preview Agility SDK requires a shader model 6.9 preview driver:
-	- [GeForce](https://developer.nvidia.com/downloads/shadermodel6-9-preview-driver)  
-	- [Quadro](https://developer.nvidia.com/downloads/assets/secure/shadermodel6-9-preview-driver-quadro)
-- Vulkan Cooperative Vector extension requires a release [driver](https://www.nvidia.com/en-gb/geforce/drivers) from R570 onwards
+- [DirectX Preview Agility SDK](https://devblogs.microsoft.com/directx/directx12agility/)
+- [Vulkan Cooperative Vector extension](https://registry.khronos.org/vulkan/specs/latest/man/html/VK_NV_cooperative_vector.html)
 
-### Samples
+## 驱动要求
 
-| Sample Name                                | Output                                                                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Simple Inferencing](SimpleInferencing.md) | [<img src="simple_inferencing.png" width="800">](simple_inferencing.png) | This sample demonstrates how to implement an inference shader using some of the low-level building blocks from RTXNS. The sample loads a trained network from a file and uses the network to approximate a Disney BRDF shader. The sample is interactive; the light source can be rotated and various material parameters can be modified at runtime.                                                                                                      |
-| [Simple Training](SimpleTraining.md)       | [<img src="simple_training.png" width="800">](simple_training.png)       | This sample builds on the Simple Inferencing sample to provide an introduction to training a neural network for use in a shader. The network replicates a transformed texture.                                                                                                                                                                                                                                                                             |
-| [Shader Training](ShaderTraining.md)       | [<img src="shader_training.png" width="800">](shader_training.png)       | This sample extends the techniques shown in the Simple Training example and introduces Slangs AutoDiff functionality, via a full MLP (Multi Layered Perceptron) abstraction. The MLP is implemented using the `CoopVector` training code previously introduced and provides a simple interface for training networks with Slang. The sample creates a network and trains a model on the Disney BRDF shader that was used in the Simple Inferencing sample. |
-| [SlangPy Training](SlangpyTraining.md)     | [<img src="slangpy_training.jpg" width="800">](slangpy_training.jpg)     | This sample shows how to create and train network architectures in python using SlangPy. This lets you experiment with different networks, encodings and more using the building blocks from RTXNS, but without needing to change or rebuild C++ code. As a demonstration this sample instantiates multiple different network architectures and trains them side-by-side on the same data. It also shows one possible approach of exporting the network parameters and architecture to disk so it can be loaded in C++. |
-| [SlangPy Inferencing](SlangpyInferencing.md) | [<img src="slangpy_inferencing_window.png" width="800">](slangpy_inferencing_window.png) | This sample demonstrates how to run neural network inference in Python using the SlangPy library and then transition the same implementation to C++. The workflow illustrates a typical development pattern where initial prototyping and experimentation is done in Python using SlangPy for its flexibility and ease of use, and the same Slang code is later deployed in a C++ application for production use. The sample includes both Python and C++ implementations that perform the same neural network inference task, providing a clear path for transitioning between the two environments. |
+- 使用 DirectX Preview Agility SDK 时，需要 Shader Model 6.9 Preview 驱动：
+  - [GeForce](https://developer.nvidia.com/downloads/shadermodel6-9-preview-driver)
+  - [Quadro](https://developer.nvidia.com/downloads/assets/secure/shadermodel6-9-preview-driver-quadro)
+- 使用 Vulkan Cooperative Vector extension 时，需要 R570 及以上正式驱动：
+  - [NVIDIA Driver](https://www.nvidia.com/en-gb/geforce/drivers)
 
-### Tutorial
+### 示例
 
-* [Tutorial](Tutorial.md) 
-  A tutorial to help guide you to create your own neural shader based on the [Shader Training](ShaderTraining.md) example.
+| 示例名称 | 结果图 | 说明 |
+| -------- | ------ | ---- |
+| [Simple Inferencing](SimpleInferencing.md) | [<img src="simple_inferencing.png" width="800">](simple_inferencing.png) | 展示如何使用 RTXNS 的底层构件实现一个推理 shader。该 sample 会从文件加载训练好的网络，并用它近似 Disney BRDF shader。运行时可以交互调节光源方向和部分材质参数。 |
+| [Simple Training](SimpleTraining.md) | [<img src="simple_training.png" width="800">](simple_training.png) | 在 Simple Inferencing 基础上进一步展示如何训练一个可用于 shader 的神经网络。这个 sample 的目标是拟合一张经过变换的纹理。 |
+| [Shader Training](ShaderTraining.md) | [<img src="shader_training.png" width="800">](shader_training.png) | 在 Simple Training 基础上引入 Slang AutoDiff 和完整的 MLP 抽象。这个 sample 使用之前介绍过的 `CoopVector` 训练代码来训练一个近似 Disney BRDF 的模型。 |
+| [SlangPy Training](SlangpyTraining.md) | [<img src="slangpy_training.jpg" width="800">](slangpy_training.jpg) | 展示如何在 Python 中借助 SlangPy 训练不同的网络结构。你可以不改 C++ 代码就试验不同网络、编码方式和训练策略，并把结果导出给 C++ 侧加载。 |
+| [SlangPy Inferencing](SlangpyInferencing.md) | [<img src="slangpy_inferencing_window.png" width="800">](slangpy_inferencing_window.png) | 展示如何先在 Python + SlangPy 中做神经网络推理，再把同一套 Slang 实现迁移到 C++。这样可以先快速原型验证，再落到生产环境。 |
 
-### Library
+### 教程
 
-* [Library](LibraryGuide.md) 
-  A guide to using the library / helper functions to create and manage your neural networks.
+- [Tutorial](Tutorial.md)
+  基于 [Shader Training](ShaderTraining.md) 示例，讲解如何开始编写你自己的 neural shader。
+
+### 库文档
+
+- [Library](LibraryGuide.md)
+  讲解如何使用库里的辅助函数来创建、管理和运行神经网络。

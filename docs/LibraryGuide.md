@@ -1,18 +1,47 @@
-# RTX Neural Shading: Library Usage Start Guide
+# RTX Neural Shading：库使用指南
 
-The library is split into 2 main areas - the application side and the shader side. 
+这个库大致可以分成两个部分：
 
-The application part of the library contains a suite of helper functions to create neural networks, serialize them to/from disk, change their precision and layout as well allocate and destroy the required backing storage. These utilize the `nvrhi` SDK to provide a graphics agnostic interface, but can easily be changed to suit a different engine.
+- 应用侧
+- shader 侧
 
-The shader part of the library contains the necessary Slang helper functions needed for training and running inference from a small neural network.
+应用侧提供了一组辅助函数，用来：
 
-## Application Code
+- 创建神经网络
+- 把网络序列化到磁盘 / 从磁盘反序列化
+- 修改网络精度和矩阵布局
+- 分配和销毁底层存储
 
-The main utility classes for creating neural networks can be found in `NeuralNetwork.h`, which contains `rtxns::HostNetwork` and  `rtxns::NetworkUtilities`. `rtxns::HostNetwork` wraps host allocation for the weights and biases with functions to store/load the network to file, where `rtxns::NetworkUtilities` contains functions to convert between a host matrix layout and device optimal matrix layout.
+它们建立在 `nvrhi` SDK 之上，因此对图形 API 本身相对无关，也可以较容易迁移到别的引擎体系中。
 
-The `rtxns::HostNetwork`  object must be created and initialized before use. It can be initialized from input parameters describing the network architecture, from a file or from another `rtxns::Network` . In each of these cases the network will be in a host layout (`rtxns::MatrixLayout::RowMajor` or `rtxns::MatrixLayout::ColumnMajor`). 
+shader 侧则提供了训练和推理小型神经网络所需的 Slang 辅助函数。
 
-```
+## 应用层代码
+
+应用层中最核心的神经网络工具类定义在 `NeuralNetwork.h` 中，主要包括：
+
+- `rtxns::HostNetwork`
+- `rtxns::NetworkUtilities`
+
+其中：
+
+- `rtxns::HostNetwork` 负责 host 侧权重和偏置的分配，以及网络文件的加载 / 保存
+- `rtxns::NetworkUtilities` 负责在 host matrix layout 和 device-optimal matrix layout 之间做转换
+
+`rtxns::HostNetwork` 在使用前必须先创建并初始化。它可以通过以下几种方式初始化：
+
+- 用输入参数描述的网络结构初始化
+- 从文件初始化
+- 从另一个 `rtxns::Network` 初始化
+
+无论哪种方式，初始化后的网络一开始都处于 host layout，也就是：
+
+- `rtxns::MatrixLayout::RowMajor`
+- 或 `rtxns::MatrixLayout::ColumnMajor`
+
+### 从参数初始化网络
+
+```cpp
 // Initialise an empty network from parameters
 nvrhi::IDevice* device = ...
 rtxns::HostNetwork hostNetwork = rtxns::HostNetwork(device);
@@ -29,7 +58,9 @@ if (!hostNetwork.Initialise(netArch))
     log::error("Failed to create a network from an arch!");
 ```
 
-```
+### 从文件初始化网络
+
+```cpp
 // Initialise a network from a file
 nvrhi::IDevice* device = ...
 rtxns::HostNetwork hostNetwork = rtxns::Network(device);
@@ -37,20 +68,22 @@ if (!hostNetwork.InitialiseFromFile("myNN.bin"))
     log::error("Failed to create a network from myNN.bin!");
 ```
 
-Creating the network will allocate the required host side memory to store the weights and biases per layer of the network. It will not allocate any GPU memory, but instead, it provides the required size and offsets so the user can make their own GPU allocations and copy over the host data as required.
+创建网络时，只会分配 host 侧用于存放每层权重和偏置的内存，并不会自动分配 GPU 内存。相反，它会把大小和 offset 等信息整理好，供你自己分配 GPU buffer 并拷贝数据。
 
-The host weights and biases are correctly sized for a direct copy to the GPU. They are accessed via a network parameters accessor and the offsets are queried from the layer accessor :
+Host 侧的权重和偏置尺寸已经可以直接拷到 GPU。参数可以通过参数访问器获得，offset 则从 layer 信息里读取：
 
-```
+```cpp
 const std::vector<uint8_t>& params = neuralNetwork.GetNetworkParams();
 
 // Copy to GPU buffer
 copy(hostBuffer, params.data(), params.size());
 ```
 
-The network has the notion of the underlying matrix layout, these are categorized into either a host layout or a device optimal layout. Note that the host layout can be used on the GPU but may not be as performant as the device optimal layouts.
+### 矩阵布局
 
-```
+网络内部有“矩阵布局”的概念，它可以分成 host layout 和 device-optimal layout 两类。host layout 当然也可以在 GPU 上使用，但性能通常不如 device-optimal layout。
+
+```cpp
 enum class MatrixLayout
 {
     RowMajor,
@@ -60,13 +93,36 @@ enum class MatrixLayout
 };
 ```
 
-The host layouts are `rtxns::MatrixLayout::RowMajor` and `rtxns::MatrixLayout::ColumnMajor` as they are both hardware and API agnostic, this makes them suitable for storing a network to a file. The device optimal layouts are `rtxns::MatrixLayout::InferencingOptimal` and `rtxns::MatrixLayout::TrainingOptimal`, which are opaque HW specific formats that are not guaranteed to be transferable between GPUs and APIs and will often have specific data alignment and padding requirements.
+其中：
 
-The typical lifecycle of a network would start in a host layout, where it is set to either initial values or loaded from file. This network would then be upload to the GPU and converted into a device optimal layout using `rtxns::NetworkUtilities::ConvertWeights`. `rtxns::MatrixLayout::TrainingOptimal` would be used whilst training the network and again using `rtxns::NetworkUtilities::ConvertWeights` changed to `rtxns::MatrixLayout::InferenceOptimal` when that training is complete. To store the trained network we must convert back to a host layout before writing to a file so it can be shared between GPUs.
+- `rtxns::MatrixLayout::RowMajor`
+- `rtxns::MatrixLayout::ColumnMajor`
 
-To change the layout of the network we first use `rtxns::NetworkUtilities::GetNewMatrixLayout()` to create a network layout of the same architecture as the host that is device optimal. The weight and bias offsets are stored for the device layout and will be passed to the GPU via constant buffer.
+属于 host layout。因为它们与具体硬件和 API 无关，所以适合写入文件。
 
-```
+而：
+
+- `rtxns::MatrixLayout::InferencingOptimal`
+- `rtxns::MatrixLayout::TrainingOptimal`
+
+属于 device-optimal layout。它们是与硬件强相关的“黑盒格式”，不能保证跨 GPU、跨 API 直接通用，且通常会带有额外的对齐和 padding 要求。
+
+### 网络的一般生命周期
+
+一个网络的典型生命周期通常是：
+
+1. 先在 host layout 中创建或从文件加载
+2. 上传到 GPU
+3. 调用 `rtxns::NetworkUtilities::ConvertWeights` 转成 device-optimal layout
+4. 训练时使用 `rtxns::MatrixLayout::TrainingOptimal`
+5. 训练完成后再转成 `rtxns::MatrixLayout::InferencingOptimal`
+6. 如果要保存模型，再转回 host layout 并写入文件
+
+### 创建新的 device layout
+
+如果要修改网络布局，通常先调用 `rtxns::NetworkUtilities::GetNewMatrixLayout()`，为相同网络结构创建一份新的 device-optimal layout。随后把权重和偏置的 offset 取出来，通过 constant buffer 传给 GPU。
+
+```cpp
 // Get a device optimized layout
 rtxns::NetworkLayout deviceNetworkLayout = m_networkUtils->GetNewMatrixLayout(neuralNetwork.GetNetworkLayout(), rtxns::MatrixLayout::TrainingOptimal);
 
@@ -84,8 +140,9 @@ biasOffsets = dm::uint4(
 
 ```
 
-After creating device side buffer of `deviceNetworkLayout.networkSize` we then use `rtxns::NetworkUtilities::ConvertWeights()` to convert the host layout to the device optimal layout.
-```
+在为 `deviceNetworkLayout.networkSize` 分配好 GPU buffer 之后，再调用 `rtxns::NetworkUtilities::ConvertWeights()`，把 host layout 转成 device-optimal layout：
+
+```cpp
 ConvertWeights(hostNetwork.GetNetworkLayout(),
     deviceNetworkLayout,
     hostBuffer,
@@ -95,39 +152,58 @@ ConvertWeights(hostNetwork.GetNetworkLayout(),
     device,
     commandList);
 ```
-The device side buffer is now ready for training. The above steps of `rtxns::NetworkUtilities::GetNewMatrixLayout()` and `rtxns::NetworkUtilities::ConvertWeights()` are required again when changing from `rtxns::MatrixLayout::TrainingOptimal` to `rtxns::MatrixLayout::InferencingOptimal`
-The trained network can also be convert back to a host side layout with `rtxns::NetworkUtilities::ConvertWeights` so it can be written to file. This functionality is wrapped up in `rtxns::HostNetwork::UpdateFromBufferToFile()`.
+
+此时这份 device buffer 就可以直接用于训练了。
+
+从 `TrainingOptimal` 转到 `InferencingOptimal` 时，也要再次执行：
+
+- `rtxns::NetworkUtilities::GetNewMatrixLayout()`
+- `rtxns::NetworkUtilities::ConvertWeights()`
+
+而当你想把训练结果保存回 host layout 时，同样也是通过 `ConvertWeights` 完成转换。这个过程在 `rtxns::HostNetwork::UpdateFromBufferToFile()` 中已经做了封装。
 
 ### Cooperative Vectors
 
-If the user wants to explore writing their own neural network class, then they should investigate the `ICoopVectorUtils` class in `CoopVector.h` and its usage within the `NeuralNetwork.h` described above. It provides an API agnostic interface to the Vulkan and DX12 Cooperative Vector extension that allows the user to query matrix sizes and convert device data between layouts and supported precisions on the GPU.
+如果你想自己实现神经网络类，而不是只使用现成封装，那么值得重点研究 `CoopVector.h` 中的 `ICoopVectorUtils`，以及它在 `NeuralNetwork.h` 中的用法。
 
-### Loss Visualization 
-The following steps outline the process for collecting per-sample loss values, reducing them on the GPU, and visualizing the final results:
+它提供了一个对 Vulkan 和 DX12 Cooperative Vector 扩展相对无关的接口，主要用来：
 
-1. **Store per-sample loss values in the Loss Buffer**  
-   During each training batch, compute one scalar loss per sample and write it into the GPU loss buffer.
+- 查询矩阵大小
+- 在 GPU 上进行不同布局之间的数据转换
+- 处理不同精度下的矩阵表示
 
-2. **Accumulate the batch loss into the Accumulation Buffer**  
-   After each batch completes, run the loss-reduction shader to sum all per-sample losses and atomically accumulate the batch total into a global accumulation buffer.
+### Loss 可视化
 
-3. **Finalize the epoch loss**  
-   When all batches in the epoch have been processed, compute the average epoch loss and write it into an output buffer.
+训练过程中，如果想把每个 sample 的 loss 汇总、回读并最终画出来，通常要经历下面几个步骤：
 
-4. **Read back the epoch results**  
-   Copy the output buffer to the CPU to retrieve the computed loss metrics.
+1. **把每个 sample 的 loss 写入 Loss Buffer**
+   在每个训练 batch 中，为每个 sample 计算一个标量 loss，并写入 GPU loss buffer
 
-5. **Plot the results using ImPlot**  
-   Append the epoch loss values to your plot data arrays and visualize the loss curve with ImPlot.
+2. **把 batch loss 累加到 Accumulation Buffer**
+   每个 batch 完成后，运行 loss reduction shader，把当前 batch 的总 loss 原子地累加到全局 accumulation buffer
 
-The SDK provides several helpers for visualizing training loss. An example of the shader code used for loss reduction is provided in the section: [Loss Reduction Shader Workflow](#loss-reduction-shader-workflow).
+3. **在 epoch 结束时计算平均 loss**
+   当这一轮 epoch 的所有 batch 都处理完成后，计算平均 epoch loss，并写入输出 buffer
 
+4. **把 epoch 结果回读到 CPU**
+   将输出 buffer 拷回 CPU，从而获取最终 loss 指标
+
+5. **使用 ImPlot 绘图**
+   把 epoch loss 追加到历史数组里，再用 ImPlot 绘制曲线
+
+SDK 已经提供了若干帮助类来实现这一流程。后文中的 [Loss Reduction Shader Workflow](#loss-reduction-shader-workflow) 章节展示了 reduction shader 的典型写法。
 
 #### ResultsReadbackHandler
-The `ResultsReadbackHandler` class manages GPU-to-CPU transfer of training results at the end of each epoch.  
-It provides a simple interface for synchronizing GPU output buffers, retrieving the computed loss values and resetting internal state for the next training iteration.
 
-```
+`ResultsReadbackHandler` 负责在每个 epoch 结束时，把训练结果从 GPU 拷回 CPU。
+
+它提供了一个比较简单的接口，用来：
+
+- 同步 GPU 输出 buffer
+- 读取最终 loss 值
+- 为下一次训练清空内部状态
+
+```cpp
 class ResultsReadbackHandler
 {
 public:
@@ -138,23 +214,28 @@ public:
     void Reset();
 };
 ```
-The key methods are:
+
+几个关键接口分别是：
+
 `void SyncResults(nvrhi::CommandListHandle commandList)`
 
-Submits GPU commands to copy the training results buffer into a CPU-visible staging buffer.
-This method must be called after the GPU has finished producing the epoch results, typically at the end of the training loop for each epoch.
+会提交 GPU copy 命令，把训练结果 buffer 拷到 CPU 可见的 staging buffer 中。通常应当在 GPU 已经计算出 epoch 结果之后调用，也就是训练循环每个 epoch 结束时调用。
 
 `bool GetResults(TrainingResults& results) const`
 
-Attempts to read the copied training results from the staging buffer.
-Returns true if valid results are available, returns false if the buffer has not yet been synchronized via SyncResults.
+尝试从 staging buffer 中读取训练结果。如果当前还没有通过 `SyncResults` 完成同步，则返回 `false`。
 
 #### ResultsWidget
 
-The `ResultsWidget` class implements a simple UI component (via `IWidget`) responsible for displaying training results across epochs. 
-It collects incoming loss metrics, stores historical values, and uses **ImPlot** to render interactive plots that visualize training progress over time.
+`ResultsWidget` 是一个简单的 UI 组件，继承自 `IWidget`，负责按 epoch 展示训练结果。
 
-```
+它会：
+
+- 收集新的 loss 指标
+- 维护历史数据
+- 使用 **ImPlot** 画出训练曲线
+
+```cpp
 class ResultsWidget : public IWidget
 {
 public:
@@ -169,17 +250,22 @@ private:
 };
 ```
 
-## Shader Code
+## Shader 侧代码
 
-The shader code library is split into several sections
+shader 库主要分为几个模块。
 
-### Linear Operations Module
+### 线性操作模块
 
-The linear operations module contains the main functions for running inferencing and training; `LinearOp` and `LinearOp_Backward`. The module also contain a backward derivative implementation `LinearOp` that can be used with Slang autodiff feature.
+线性操作模块是训练和推理的核心，主要提供：
 
-The `LinearOp` function is used to carry out a forward linear step in a neural network from an input layer of size `K` to the next layer of size `M`, where the weight and bias are stored in a single buffer. `CoopVecMatrixLayout` states the layout the weight matrix being used which should match the `MatrixLayout` set on the C++ side. `CoopVecComponentType` determines how the matrix should be interpreted, which in most cases should match the type `T`.
+- `LinearOp`
+- `LinearOp_Backward`
 
-```
+同时它还提供了一个可与 Slang autodiff 协作的 `LinearOp` backward derivative 实现。
+
+`LinearOp` 用于在神经网络中执行一次线性前向步骤：把大小为 `K` 的输入层映射到大小为 `M` 的下一层。权重和偏置都存放在同一个 buffer 中。`CoopVecMatrixLayout` 指定权重矩阵的布局，它应当与 C++ 侧的 `MatrixLayout` 一致；`CoopVecComponentType` 则指定矩阵按什么精度解释，通常应与类型 `T` 相匹配。
+
+```cpp
 CoopVec<T, M> LinearOp<T : __BuiltinFloatingPointType, let M : int, let K : int>( 
     CoopVec<T, K> ip, 
     ByteAddressBuffer matrixBiasBuffer, 
@@ -189,9 +275,9 @@ CoopVec<T, M> LinearOp<T : __BuiltinFloatingPointType, let M : int, let K : int>
     constexpr CoopVecComponentType componentType)
 ```
 
-The `LinearOp_Backward` function is used to carry out a backwards linear step in a neural network applying a gradient of size `M` to the previous layer of size `K`. The  weight, bias and their derivatives are each stored in their respective buffer. As with `LinearOp`, `CoopVecMatrixLayout` states the layout of the weight matrix being used and  `CoopVecComponentType` determines how the matrix should be interpreted.
+`LinearOp_Backward` 用于反向传播时的线性步骤：把大小为 `M` 的梯度应用到前一层大小为 `K` 的输入上。权重、偏置以及它们的导数分别存放在对应 buffer 中。
 
-```
+```cpp
  CoopVec<T, K> LinearOp_Backward<T : __BuiltinFloatingPointType, let M : int, let K : int>(
     CoopVec<T, K> ip, 
     CoopVec<T, M> grad, 
@@ -203,13 +289,13 @@ The `LinearOp_Backward` function is used to carry out a backwards linear step in
     constexpr CoopVecComponentType componentType)
 ```
 
-#### Differentiable  LinearOps
+#### 可微的 LinearOps
 
-The second half of this module extends the functionality of cooperative vectors to provide support for Slang's auto differentiation feature as it is not natively supported. 
+模块的后半部分扩展了 cooperative vector，使其能与 Slang 自动微分配合使用，因为这部分能力原生并不直接可用。
 
-The `MatrixBiasBuffer` and `MatrixBiasBufferDifferential` structures inherit Slang's `IDifferentiablePtrType` interface so the matrix buffer and its derivative will support auto differentiation.
+`MatrixBiasBuffer` 和 `MatrixBiasBufferDifferential` 都继承自 Slang 的 `IDifferentiablePtrType`，从而让矩阵 buffer 和它的导数支持 autodiff：
 
-```
+```cpp
 struct MatrixBiasBufferDifferential : IDifferentiablePtrType
     {
         typealias Differential = MatrixBiasBufferDifferential;
@@ -235,9 +321,9 @@ struct MatrixBiasBuffer : IDifferentiablePtrType
 };
 ```
 
-Next we have a differentiable version of `LinearOp` where the `matrixBiasBuffer` is replaced with the `MatrixBiasBuffer` struct and the offsets are passed in. 
+随后，这个模块又提供了一个可微版本的 `LinearOp`，它把 `matrixBiasBuffer` 替换成了 `MatrixBiasBuffer`，并且通过 `offsets` 传递权重和偏置位置：
 
-```
+```cpp
 CoopVec<T, M> LinearOp<T : __BuiltinFloatingPointType, let M : int, let K : int>( 
     CoopVec<T, K> ip, 
     MatrixBiasBuffer matrixBiasBuffer, 
@@ -246,9 +332,9 @@ CoopVec<T, M> LinearOp<T : __BuiltinFloatingPointType, let M : int, let K : int>
     constexpr CoopVecComponentType componentType)
 ```
 
-`LinearOp_BackwardAutoDiff` is the backwards derivative of LinearOp, where the input `CoopVec` and `MatrixBiasBuffer` are now passed in a `DifferentialPair`. See Slang documentation for details
+`LinearOp_BackwardAutoDiff` 则是这个 `LinearOp` 的 backward derivative，其中输入 `CoopVec` 和 `MatrixBiasBuffer` 都通过 `DifferentialPair` 传递。更具体的语义可以参考 Slang 的 autodiff 文档。
 
-```
+```cpp
 [BackwardDerivativeOf(LinearOp)]
 void LinearOp_BackwardAutoDiff<T : __BuiltinFloatingPointType, let M : int, let K : int>( 
     inout DifferentialPair<CoopVec<T, K>> ip, 
@@ -259,11 +345,11 @@ void LinearOp_BackwardAutoDiff<T : __BuiltinFloatingPointType, let M : int, let 
     CoopVec<T, M>.Differential grad)
 ```
 
-### Activation Function Module
+### 激活函数模块
 
-This module provides implementations of common activation functions
+这个模块提供了一系列常见激活函数实现：
 
-```
+```cpp
 struct NoneAct<T : __BuiltinFloatingPointType, let K : int> : IActivation<T, K>
 
 struct LinearAct<T : __BuiltinFloatingPointType, let K : int> : IActivation<T, K>
@@ -284,13 +370,23 @@ struct TanhAct<T : __BuiltinFloatingPointType, let K : int> : IActivation<T, K>
 
 ```
 
-### MLP Module
+### MLP 模块
 
-The MLP module contains two structures for representing and running a neural network; `InferenceMLP` and `TrainingMLP`. Both structures contain functions for running a full forward pass on the network, where they differ is the use case for each. `InferenceMLP` is for inferencing only and provides a forward pass function only. `TrainingMLP` is used for training a network and contains an additional buffer for derivatives and a backwards pass function. `TrainingMLP` uses Slang's auto differentiation  functionality to generate a backwards propagation function instead of providing an implementation for it. 
+MLP 模块里有两个核心结构：
+
+- `InferenceMLP`
+- `TrainingMLP`
+
+二者都能执行完整的 forward pass，但使用场景不同：
+
+- `InferenceMLP` 只负责推理
+- `TrainingMLP` 负责训练，除了 forward 之外，还包含额外的导数 buffer 和 backward 接口
+
+`TrainingMLP` 的 backward 不是手写出来的，而是利用 Slang 的 autodiff 自动生成。
 
 #### InferenceMLP
 
-```
+```cpp
  struct InferenceMLP<
         T : __BuiltinFloatingPointType, 
         let HIDDEN_LAYERS : int, 
@@ -301,18 +397,18 @@ The MLP module contains two structures for representing and running a neural net
         let componentType : CoopVecComponentType
     >
     {
-        ...
+        ...
         CoopVec<T, OUTPUTS> forward<Act : IActivation<T, HIDDEN>, FinalAct : IActivation<T, OUTPUTS>>(
             CoopVec<T, INPUTS> inputParams, 
             Act act, 
             FinalAct finalAct);
-        ...
+        ...
     }
 ```
 
 #### TrainingMLP
 
-```
+```cpp
  struct TrainingMLP<
         T : __BuiltinFloatingPointType, 
         let HIDDEN_LAYERS : int, 
@@ -322,31 +418,31 @@ The MLP module contains two structures for representing and running a neural net
         let matrixLayout : CoopVecMatrixLayout, 
         let componentType : CoopVecComponentType
     >
-    {
-        ...
-        CoopVec<T, OUTPUTS> forward<Act : IActivation<T, HIDDEN>, FinalAct : IActivation<T, OUTPUTS>>(CoopVec<T, INPUTS> inputParams, Act act, FinalAct finalAct);
+    {
+        ...
+        CoopVec<T, OUTPUTS> forward<Act : IActivation<T, HIDDEN>, FinalAct : IActivation<T, OUTPUTS>>(CoopVec<T, INPUTS> inputParams, Act act, FinalAct finalAct);
 
-        void backward<Act : IActivation<T, HIDDEN>, FAct : IActivation<T, OUTPUTS>>(CoopVec<T, INPUTS> ip, Act act, FAct fact, CoopVec<T, OUTPUTS> loss);
-        ...
-    }
+        void backward<Act : IActivation<T, HIDDEN>, FAct : IActivation<T, OUTPUTS>>(CoopVec<T, INPUTS> ip, Act act, FAct fact, CoopVec<T, OUTPUTS> loss);
+        ...
+    }
 ```
 
-### Optimizer Module
+### Optimizer 模块
 
-This module provides an interface and implementations of common optimizer functions
+这个模块定义了若干优化器实现的统一接口。
 
-The interface consists of step functions required for each implementation
+统一接口要求每个优化器都实现一步更新：
 
-```
+```cpp
 interface IOptimizer
 {
     float step(float weightBias, uint parameterID, float gradient, const float currentStep);
 };
 ```
 
-The module contains an implementation of the Adam optimizer algorithm, which add two moment buffers and hyper parameters
+当前模块中提供了 Adam 优化器实现。它额外引入了两个 moment buffer 和一些超参数：
 
-```
+```cpp
 struct Adam : IOptimizer
 {
     RWBuffer<float> m_moments1;
@@ -359,56 +455,67 @@ struct Adam : IOptimizer
 }
 ```
 
-### Utility Module
+### Utility 模块
 
-This module provides functionality for input encoding and packing weight and bias buffer offsets
+这个模块主要提供：
 
-The encoder functions can be use to increase the input count of a neural network, providing additional information to assist the learning process. Use of these should be validated to confirm they improve quality and / or performance.
+- 输入编码
+- 权重 / 偏置 offset 解包
 
-`CoopVecFromArray` simply constructs a `CoopVec`of matching size from a float array.
+编码器的目的，是扩展神经网络输入维度，为学习过程提供更丰富的信息。是否真的提升质量或性能，仍然应该结合具体任务验证。
 
-```
+`CoopVecFromArray` 用于从一个 float 数组创建同尺寸的 `CoopVec`：
+
+```cpp
 CoopVec<T, PARAMS_COUNT> CoopVecFromArray<T : __BuiltinFloatingPointType, let PARAMS_COUNT : int>(float parameters[PARAMS_COUNT])
 ```
 
-`EncodeFrequency` expands the input parameters by 6 for each input, which are encoded with sine and cosine waves
+`EncodeFrequency` 会把每个输入参数扩展为 6 个分量，并通过正弦 / 余弦波形式编码：
 
-```
+```cpp
 CoopVec<T, PARAMS_COUNT * FREQUENCY_ENCODING_COUNT> EncodeFrequency<T : __BuiltinFloatingPointType, let PARAMS_COUNT : int>(float parameters[PARAMS_COUNT])
 ```
 
-`EncodeTriangle` similar to frequency encoding this expands the input parameters by 6 for each input, encoding them to represent a triangle wave
+`EncodeTriangle` 也会把每个输入扩展为 6 个分量，但编码形式是三角波：
 
-```
+```cpp
 CoopVec<T, PARAMS_COUNT * TRIANGLE_ENCODING_COUNT> EncodeTriangle<T : __BuiltinFloatingPointType, let PARAMS_COUNT : int>(float parameters[PARAMS_COUNT])
 ```
 
-The `UnpackArray` function is used to unpack the weight and bias offsets from a constant buffer aligned uint4 array
+`UnpackArray` 用于把 constant buffer 中按 `uint4` 打包对齐的权重 / 偏置 offset 解包出来：
 
-```
+```cpp
 uint[NUM_UNPACKED] UnpackArray<let NUM_PACKED4 : int, let NUM_UNPACKED : int>(uint4 ps[NUM_PACKED4])
 ```
-### LossAccumulation Module
 
-The LossAccumulation module provides a lightweight, GPU-friendly system for accumulating floating-point loss components into a `RWByteAddressBuffer`.
-It supports:
+### LossAccumulation 模块
 
-* Dynamically sized loss vectors
-* Safe clamping of component counts
-* Portable atomic float addition (DXIL + vendor-specific paths)
-* Helpers for zeroing, adding, and accumulating loss arrays
+`LossAccumulation` 模块提供了一套轻量、适合 GPU 的浮点 loss 累加机制，用来把多分量 loss 累加进 `RWByteAddressBuffer`。
 
-This module is designed for neural-network training loops, metric gathering, and any workload requiring multi-component floating-point reductions on the GPU.
+它支持：
 
-#### Constants
-```
+- 动态长度的 loss 向量
+- 对组件数量做安全裁剪
+- 可移植的原子浮点加法（DXIL + 厂商相关路径）
+- 初始化、相加和累加 loss 数组的辅助函数
+
+这个模块适合：
+
+- 神经网络训练循环
+- 指标收集
+- 以及所有需要在 GPU 上做多分量浮点归约的场景
+
+#### 常量
+
+```cpp
 public static const uint LOSS_ACCUM_MAX_COMPONENTS = 128;
 ```
 
-The maximum number of accumulatable components for a loss vector. Any requested size is clamped to this limit.
+它表示 loss 向量允许累加的最大组件数。任何请求的分量数都会被裁剪到这个上限。
 
 #### LossConfig
-```
+
+```cpp
 public struct LossConfig
 {
     uint componentCount;
@@ -421,101 +528,113 @@ public struct LossConfig
 }
 ```
 
-LossConfig describes how a block of loss components should be stored in the target buffer:
+`LossConfig` 描述了一段 loss 分量在目标 buffer 中的存放方式：
 
-* componentCount – number of components to accumulate
-* baseByteOffset – starting byte offset into the `RWByteAddressBuffer`
+- `componentCount`：需要累加的分量个数
+- `baseByteOffset`：在 `RWByteAddressBuffer` 中的起始字节偏移
 
-`GetComponentCount()` ensures the value never exceeds `LOSS_ACCUM_MAX_COMPONENTS`
+`GetComponentCount()` 会保证最终值不超过 `LOSS_ACCUM_MAX_COMPONENTS`。
 
-Each component occupies 4 bytes (32-bit float).
+每个分量占用 4 字节，也就是一个 32-bit float。
 
-#### Atomic Float Addition
-##### CAS-Based Atomic Add (DXIL Fallback)
-```
+#### 原子浮点加法
+
+##### 基于 CAS 的 Atomic Add（DXIL 回退实现）
+
+```cpp
 float AtomicAddFloat(RWByteAddressBuffer buffer, uint byteOffset, float valueToAdd)
 ```
 
-Implements atomic float addition using compare-and-swap (CAS). 
-Used when native InterlockedAddF32 is unavailable.
-Returns the previous value at the memory location.
+这个函数通过 compare-and-swap 实现原子浮点加法。当原生 `InterlockedAddF32` 不可用时就使用它。返回值是更新前的旧值。
 
-##### Portable Selection
-```
+##### 可移植选择封装
+
+```cpp
 public float AtomicAddF32Portable(
     RWByteAddressBuffer buffer,
     uint byteOffset,
     float value)
 ```
 
-Automatically selects:
+它会自动选择：
 
-* Native InterlockedAddF32 (where supported)
-* CAS fallback (AtomicAddFloat) for DXIL without float atomics
+- 原生 `InterlockedAddF32`
+- 或在 DXIL 上使用 `AtomicAddFloat` 作为回退路径
 
-#### Component Array Utilities
-##### Zero an Array
-```
+#### 组件数组辅助函数
+
+##### 清零数组
+
+```cpp
 public void Zero<let N : int>(out float components[N])
 ```
 
-Initializes all N elements to 0.0f. Useful for initializing per-thread or per-sample loss accumulators.
+把长度为 `N` 的数组全部初始化为 `0.0f`。适合初始化每线程或每 sample 的临时 loss 累加器。
 
-#### Add One Component Array to Another
-```
+##### 数组逐项相加
+
+```cpp
 public void AddInPlace<let N : int>(
     inout float dst[N],
     float src[N],
     uint componentCount)
 ```
 
-Adds values from src into dst for the first componentCount elements.
-Stops early if componentCount < N.
+把 `src` 中前 `componentCount` 个分量累加到 `dst` 中。如果 `componentCount < N`，就只加前面那一部分。
 
-#### Accumulating Components to Memory
-```
+#### 累加到内存
+
+```cpp
 public void AccumulateComponents<let N : int>(
     RWByteAddressBuffer buffer,
     float components[N],
     LossConfig config)
 ```
 
-Accumulates each component into the buffer starting at config.baseByteOffset.
+这个函数会从 `config.baseByteOffset` 开始，把每个分量累加到目标 buffer 中。
 
-##### Behavior
+##### 行为说明
 
-* Computes offset: `byteOffset = config.baseByteOffset + (i * 4)`
-* Performs atomic floating-point addition using `AtomicAddF32Portable`
-* Only updates up to `config.GetComponentCount()`
+- 字节偏移计算方式为：`byteOffset = config.baseByteOffset + (i * 4)`
+- 每个分量通过 `AtomicAddF32Portable` 执行原子浮点加
+- 实际更新分量数不会超过 `config.GetComponentCount()`
 
-##### Typical Use Case
+##### 典型用法
 
-1. Maintain per-thread or per-sample component arrays
-2. Reduce locally
-3. Call AccumulateComponents to merge into a global GPU buffer
+1. 每线程或每 sample 先维护一个局部的分量数组
+2. 先做局部 reduction
+3. 再调用 `AccumulateComponents` 把它合并到全局 GPU buffer 中
 
-### Loss Reduction Shader Workflow
+<a id="loss-reduction-shader-workflow"></a>
 
-Before the reduction step, each sample computes its own scalar loss value. See examples in [SimpleTraining](SimpleTraining.md#l2-loss-computation) and [ShaderTraining](ShaderTraining.md#l2-relative-loss-computation).
+### Loss Reduction Shader 工作流
 
-The `lossReduction_cs` compute shader reduces per-sample loss values into a single batch-level loss and accumulates it into a global buffer for later epoch-level processing.
+在 reduction 之前，每个 sample 都会先算出自己的标量 loss。具体可以参考：
 
-Each thread reads one scalar loss from `lossBuffer` (up to `gConst.batchSize` samples). These per-sample losses are first written into `gLossShared`, a group-shared scratch array. The shader then performs a tree-style parallel reduction across the thread group, using `AddInPlace` to sum the components in-place. After the final reduction step, thread `0` holds the total loss for the batch in `gLossShared[0]`.
+- [SimpleTraining](SimpleTraining.md#l2-loss-computation)
+- [ShaderTraining](ShaderTraining.md#l2-relative-loss-computation)
 
-That final batch loss is then atomically accumulated into the global `accumulationBuffer` via `AccumulateComponents`, using a `LossConfig` constructed by `MakeLossConfig`. With `MAX_COMPONENTS` set to `1`, this shader effectively computes and accumulates a single scalar loss value per batch, suitable for computing epoch averages or plotting training curves.
+`lossReduction_cs` compute shader 的工作，是把这些 per-sample loss 归约成一个 batch 级别的 loss，并进一步累加到全局 buffer，供 epoch 级统计使用。
 
-#### Works with any scalar per-sample loss
+每个线程会从 `lossBuffer` 中读取一个标量 loss（索引不超过 `gConst.batchSize`）。这些值会先写进 group shared 内存 `gLossShared`，然后在 thread group 内做树形 reduction，借助 `AddInPlace` 把数据就地累加。最终 reduction 完成后，线程 `0` 持有整个 batch 的总 loss。
 
-This reduction pattern is fully agnostic to how the per-sample scalar loss is computed. Any stage in the pipeline may write one float per sample into `lossBuffer`, for example:
+接下来，这个 batch loss 会通过 `AccumulateComponents` 和 `MakeLossConfig` 原子地写入全局 `accumulationBuffer`。因为这里的 `MAX_COMPONENTS` 设为 `1`，所以它本质上就是按 batch 累加一个标量 loss，非常适合：
 
-- Mean squared error per pixel or sample  
-- L2 error, L1 error, or Huber loss per sample  
-- Classification negative log-likelihood per sample  
-- Any custom scalar loss metric  
+- 计算 epoch 平均值
+- 或者绘制训练曲线
 
-As long as each sample contributes exactly one scalar, this shader will correctly sum all sample losses for the batch and accumulate the result for epoch-level statistics or visualization.
+#### 可适配任意 per-sample 标量 loss
 
-```
+这种 reduction 模式本身并不依赖具体 loss 的定义。任何阶段只要能往 `lossBuffer` 中写“每个 sample 一个 float”，这个 reduction shader 都能正常工作。例如：
+
+- 每像素 / 每 sample 的 MSE
+- 每 sample 的 L2、L1 或 Huber loss
+- 分类问题里的负对数似然
+- 任何自定义标量 loss
+
+只要每个 sample 最终贡献的是一个标量，这个 shader 就能把 batch 中的所有值求和，并进一步为 epoch 级统计和可视化服务。
+
+```cpp
 static const uint THREADS_PER_GROUP = RESULTS_THREADS_PER_GROUP;
 static const uint MAX_COMPONENTS = 1; 
 
@@ -553,13 +672,13 @@ void lossReduction_cs(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupT
 }
 ```
 
-#### Computing the Epoch Average Loss
+#### 计算 Epoch 平均 Loss
 
-After all batches in an epoch have been processed and each batch loss has been accumulated into the global `accumulationBuffer`, the total loss for the entire epoch can be read back and converted into an average loss value.
+当一个 epoch 中所有 batch 都已经处理完，并且每个 batch 的 loss 都已经累加到全局 `accumulationBuffer` 后，就可以读出整轮 epoch 的总 loss，并把它换算成平均 loss。
 
-The accumulation buffer stores the sum of all per-sample losses across the epoch. To compute the average loss, read the accumulated value and divide by the number of samples processed during the epoch:
+`accumulationBuffer` 中保存的是整个 epoch 的 per-sample loss 总和。要得到平均值，只需要读出它，并除以这一轮 epoch 处理过的 sample 数量：
 
-```
+```cpp
     float lossSum =  asfloat(accumulationBuffer.Load(0u));
     float epochLoss = lossSum / gConst.epochSampleCount;
     

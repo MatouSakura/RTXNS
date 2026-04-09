@@ -1,78 +1,108 @@
-# RTX Neural Shading: SlangPy Training Example
+# RTX Neural Shading：SlangPy Training 示例
 
-## Purpose
+## 目的
 
-This sample shows how to create and train network architectures in Python using the SlangPy library. This lets you experiment with different networks, encodings and more, but without needing to change or rebuild C++ code.
+这个 sample 展示了如何使用 SlangPy 在 Python 中创建并训练网络结构。这样你就可以在不改 C++ 代码、也不重新编译 C++ 的情况下，快速试验不同网络、不同编码方式和不同训练策略。
 
-As a demonstration, this sample instantiates multiple different network architectures and trains them side-by-side on the same data. It also shows one possible approach of exporting the final network parameters and architecture to disk so it can be loaded from C++ without needing to edit header files.
+作为演示，它会同时实例化多个不同的网络结构，并在同一份数据上并排训练。它还展示了一种把最终模型参数和网络结构导出到磁盘的方法，这样后续就可以在 C++ 侧加载，而不必手改头文件。
 
-We revisit the texture training example from [Simple Training](SimpleTraining.md) and show how small tweaks to the network architecture can have a big impact on training quality. How to build a good model for a particular application is far outside the scope of this document, and this is intended as an illustrative example and should not be considered practical texture compression.
+这里重新使用了 [Simple Training](SimpleTraining.md) 中的纹理训练例子，用它说明：只要对网络结构做一些小调整，就可能明显改变训练质量。如何为某个实际应用设计“好模型”远超这份文档的范围，因此这个 sample 更偏向示意性质，不应该被当成真正的纹理压缩方案。
 
 ![SlangPy Training Output](slangpy_training.jpg)
 
-## Motivation
+## 动机
 
-It's almost impossible to know ahead of time which kind of network will perform best for a given application. The development process of a neural model usually involves an exploration phase, where many different architectures and training setups are tried.
+在实际项目里，几乎不可能事先准确知道哪一种网络结构最适合某个应用。神经模型开发通常都包含一个探索阶段，在这个阶段里你需要频繁尝试：
 
-We used a predetermined network architecture in each of the previous samples for simplicity, and this can work well if you already know the network is a good match to your problem. However, when that's not the case, doing model exploration in the previous samples can be inconvenient, as it requires changes to multiple files and recompilation each time.
+- 不同的网络结构
+- 不同的训练设置
+- 不同的激活函数
+- 不同的 loss
 
-Popular machine learning frameworks such as `pytorch` or `jax` are designed to make this kind of exploration easy. Unfortunately however, these frameworks are geared more towards large networks, and using them for the small networks we explore here entails a large performance penalty compared to training with RTXNS. We'll show an alternative approach that uses the building blocks of RTXNS, but applies them in a modular way in Python similar to `pytorch`.
+前面的 sample 为了易懂，都使用了预先固定的网络结构。如果你已经非常确定这个结构和你的问题相匹配，那当然没问题；但如果你还在探索阶段，那种做法会比较别扭，因为每次改动都需要修改多份文件并重新编译。
 
-## Setup steps
+像 `pytorch` 或 `jax` 这类框架非常适合做这种探索，但它们更偏向大网络场景。如果直接拿来训练这里这种小网络，往往会比 `RTXNS` 自己的路径慢很多。
 
-To run the sample, some additional dependencies are required.
+这个 sample 展示了一种替代思路：
 
-#### Prerequisites
+- 底层仍然使用 `RTXNS` 的 building block
+- 但在 Python 侧用一种更模块化、接近 `pytorch` 的方式来组织模型
 
-A recent version of Python (`Python >= 3.9`) is required. Installation instructions vary by platform.
+## 环境准备
 
-#### Installation
+运行这个 sample 之前，需要安装额外依赖。
 
-In the root folder, running the command
+### 前置要求
+
+需要较新的 Python 版本：
+
+- `Python >= 3.9`
+
+具体安装方式随平台而异。
+
+### 安装依赖
+
+在仓库根目录执行：
+
 ```
 pip install -r samples/SlangpyTraining/requirements.txt
 ```
-will install the necessary requirements.
 
-### Running the sample
+### 运行示例
 
-In the root folder, the following command
+在仓库根目录执行：
+
 ```
 python samples\SlangpyTraining\SlangpyTraining.py
 ```
-will launch the SlangPy sample. This will pop up a window that trains four different network architectures, one after the other. The model fit is displayed at the top, and an amplified error image between the reference and the fit is shown at the bottom.
 
-After training completes, the best model is written to disk, and the sample compiles an inferencing shader for the model that was just trained. It then launches a C++ sample program that will evaluate the model, similar to the [Simple Training](SimpleTraining.md) sample.
+程序会打开一个窗口，并依次训练 4 种不同的网络结构。每个模型都会显示：
 
-## SlangPy Overview
+- 上方：当前拟合结果
+- 下方：参考图像与拟合结果之间放大的误差图
 
-This sample uses the SlangPy library, which provides an easy way to call GPU code written in Slang from Python. A full explanation of SlangPy is out of scope for this document, and the [official documentation](https://SlangPy.readthedocs.io/en/latest/) is a good place for exploring more in-depth, but we will briefly go over the basics.
+当训练完成后，sample 会：
 
-### Device setup
+1. 把最佳模型写到磁盘
+2. 为这个模型编译一个推理 shader
+3. 启动一个 C++ sample 来执行推理，效果与 [Simple Training](SimpleTraining.md) 类似
 
-The first step is to create a `Device()` object. To help set up the include paths used in the sample, the `SDKSample` class from `Helpers.py` will do this automatically when it is instantiated:
+## SlangPy 概览
+
+这个 sample 使用 SlangPy，它提供了一种非常方便的方式，让 Python 直接调用用 Slang 编写的 GPU 代码。
+
+更完整的说明请参考 [官方文档](https://SlangPy.readthedocs.io/en/latest/)，这里先快速梳理一下最核心的概念。
+
+### 设备初始化
+
+第一步是创建设备对象。为了帮 sample 自动设置好 include 路径，这里通过 `Helpers.py` 中的 `SDKSample` 来完成：
+
 ```
 sample = SDKSample(sys.argv[1:])
 device = sample.device
 ```
 
-From there, the next step is to load a slang module:
+接下来加载一个 Slang 模块：
+
 ```
 module = Module.load_from_file(device, "SlangpyTraining.slang")
 ```
 
-This returns a `Module` that contains all the types and functions from the slang module.
+返回值是一个 `Module`，它包含了这个 Slang 模块中的所有类型和函数。
 
-### Simple function calls
+### 简单函数调用
 
-Let's say it contained this function:
+假设 Slang 模块里有这样一个函数：
+
 ```
 float add(float a, float b)
 {
     return a + b;
 }
 ```
-then we could call it from Python like so:
+
+那么你在 Python 中可以这样调用它：
+
 ```
 result = module.add(1.0, 2.0)
 print(result) # 3.0
@@ -80,9 +110,13 @@ print(result) # 3.0
 # Named parameters are also supported
 result = module.add(a=1.0, b=2.0)
 ```
-Internally, this generates a compute shader and runs it on the GPU to compute the result.
 
-Doing this for two numbers is not particularly efficient. However, SlangPy provides an easy way to apply the same function to a large number of elements. If we change the code to instead pass a large array of floats:
+其内部会自动生成一个 compute shader，并在 GPU 上执行它。
+
+如果只是拿它来算两个数字，当然不算高效。但 SlangPy 真正强大的地方在于，它可以很轻松地把同一个函数应用到大批量数据上。
+
+例如：
+
 ```
 a = np.random.rand(1000000)
 b = np.random.rand(1000000)
@@ -91,24 +125,36 @@ result = module.add(a, b, _result=np.ndarray)
 
 print(result[:10])
 ```
-then we run the same function as before, but now applied individually to each of the 1'000'000 elements.
 
-Applying a function equally over a large group of data is core to graphics programming, and the goal of SlangPy is to make this easy. SlangPy accepts a variety of different types as arguments, including NumPy arrays, textures and torch.Tensors.
+这里执行的还是同一个函数，只不过它被向量化后，分别作用于 100 万个元素。
 
-SlangPy comes with a handful of builtin types to make working with calls easier. The default return type of a SlangPy call is `NDBuffer`, which is a GPU buffer with a given shape and (Slang) element type. It's possible to request alternate output formats, e.g. in the form of a NumPy array, by passing a type to the `_result` argument like in the example above.
+这种“对一大批数据逐元素执行同一种函数”的模式，本来就是图形编程中的常见模式。SlangPy 的目标就是把这种调用方式变得简单自然。
 
-### Passing structs
+SlangPy 支持的参数类型很多，包括：
 
-Slang structs can be passed as a Python dictionary. For example, the following slang function:
+- NumPy 数组
+- 纹理
+- torch.Tensors
+
+默认情况下，SlangPy 的返回类型是 `NDBuffer`，它表示一个具有指定形状和 Slang 元素类型的 GPU buffer。你也可以像前面的例子一样，通过 `_result` 参数指定输出格式，例如直接拿到一个 NumPy 数组。
+
+### 传递 struct
+
+Slang 中的 struct 可以用 Python 字典传入。例如：
+
 ```
 struct Color { float red; float green; float blue; }
 void processColor(Color c) { /* ... */ }
 ```
-can be called from Python like this:
+
+可以这样调用：
+
 ```
 module.processColor({"red": 1.0, "green": 0.5, "blue": 0.0})
 ```
-Equivalently, we can create a matching Python class and provide a `get_this` method:
+
+也可以在 Python 中创建一个同构类，并提供 `get_this()` 方法：
+
 ```
 class Color:
     # ...
@@ -119,15 +165,20 @@ class Color:
 c = Color( .... )
 module.processColor(c)
 ```
-When encountering a Python object with a `get_this` method, SlangPy will call it to unpack the object and then translate it to slang. The name of the Python class is not important; just that the dictionary fields match the Slang struct.
 
-## Architecture overview
+当 SlangPy 发现一个 Python 对象提供了 `get_this()`，就会调用它，并把返回字典翻译成对应的 Slang struct。重点不在 Python 类名，而在字典字段必须和 Slang struct 字段一致。
 
-In order to try out different networks, we need a way to run the building blocks of the RTXNS slang library without manually writing the training and inferencing code.
+## 架构概览
 
-The main idea is very similar to how frameworks like `pytorch` work. First, we take the components of RTXNS and make them conform to a shared interface (in torch, this would be `torch.nn.Module`) with a differentiable `forward` method. Then, we provide ways to combine and mix those modules together to build powerful architectures (the equivalent of `torch.nn.Sequential`).
+如果我们想频繁尝试不同网络，就需要一种办法，在不手写每个训练 / 推理 shader 的前提下，直接运行 `RTXNS` 库里的神经网络 building block。
 
-To achieve this, this sample adds a small wrapper around RTXNS in `NeuralModules.slang`. First, it introduces a new interface:
+这里的核心思路和 `pytorch` 很接近：
+
+1. 先把 `RTXNS` 的模块都适配到统一接口上
+2. 再像 `torch.nn.Sequential` 那样，把这些模块自由组合起来构建网络
+
+为此，这个 sample 在 `NeuralModules.slang` 里包装了一层新的抽象，首先定义了一个接口：
+
 ```
 interface IModule<T : __BuiltinFloatingPointType, let NumInputs : int, let NumOutputs : int>
 {
@@ -135,9 +186,11 @@ interface IModule<T : __BuiltinFloatingPointType, let NumInputs : int, let NumOu
     CoopVec<T, NumOutputs> forward(CoopVec<T, NumInputs> inputParams);
 }
 ```
-A type that conforms to `IModule<T, NumIn, NumOut>` will provide a `forward` method that takes a CoopVector with `NumIn` elements of type `T`, does some computation, and returns a CoopVector with `NumOut` elements.
 
-This way, we can write generic code that can work with any model, without actually needing to know what the model is. For example, `SlangpyTraining.slang` defines this function:
+任何满足 `IModule<T, NumIn, NumOut>` 的类型，都必须提供一个 `forward`：输入是一个 `NumIn` 大小的 `CoopVec`，输出是一个 `NumOut` 大小的 `CoopVec`。
+
+这意味着我们可以写出与具体模型无关的泛型代码。例如 `SlangpyTraining.slang` 中的这个函数：
+
 ```
 [Differentiable]
 float3 EvalModel<Model: rtxns::IModule<half, 2, 3>>(Model model, no_diff float2 inputUV)
@@ -149,9 +202,23 @@ float3 EvalModel<Model: rtxns::IModule<half, 2, 3>>(Model model, no_diff float2 
     return rtxns::VectorFromCoopVec(result);
 }
 ```
-to evaluate a model. From the interface constraint `Model: rtxns::IModule<half, 2, 3>`, we know the model takes 2 inputs and produces 3 outputs (UV coordinates and RGB in this sample), and it will correctly evaluate any model that conforms to this requirement. Both `IModule::forward` and `EvalModel` are marked as differentiable, meaning we can backpropagate through the model just by calling `bwd_diff(EvalModel)`.
 
-This lets us write a completely generic training function that will compute the gradients for a model that should fit a reference texture:
+由于约束里写明了 `Model: rtxns::IModule<half, 2, 3>`，所以我们知道：
+
+- 模型接收 2 维输入
+- 输出 3 维结果
+
+也就是说，只要某个模型符合这个接口，它就能被这个函数正确执行。
+
+而且：
+
+- `IModule::forward`
+- `EvalModel`
+
+都被标记为可微，因此只需调用 `bwd_diff(EvalModel)` 就能自动完成整条模型路径的反向传播。
+
+于是就可以得到一个完全泛化的训练函数，用于拟合参考纹理：
+
 ```
 void TrainTexture<
     Model : rtxns::IModule<half, 2, 3>,
@@ -174,18 +241,28 @@ void TrainTexture<
     bwd_diff(EvalModel)(model, inputUV, lossGradient);
 }
 ```
-This function follows the same pattern as the [Simple Training](SimpleTraining.md) example, except that the model itself is now abstracted into a generic parameter. It goes through the following steps:
-- Generate a random UV coordinate
-- Evaluate the reference RGB color `targetRGB` by sampling the target texture
-- Evaluate the model at the same coordinate with `EvalModel` to get the `predictedRGB` color
-- Compute the gradient of the loss comparing them with `Loss.deriv(targetRGB, predictedRGB, lossScale);`
-- Backpropagate the gradient with `bwd_diff(EvalModel)`.
 
-Compared to the previous sample, this condenses the function quite a bit, and it is now reusable: We can pass in any model that takes 2 inputs and produces 3 outputs, and we can rely on slang to generate the correct inference and gradient code.
+和 [Simple Training](SimpleTraining.md) 相比，这里最大的变化是：模型本身不再写死，而是被抽象成一个泛型参数。
 
-### Neural Model implementations
+整个流程仍然一样：
 
-What do these `IModule` implementations actually look like? For the most part, these are just thin wrappers around RTXNS functions. For example, `NeuralModules.slang` contains a `FrequencyEncoding` that looks like this:
+- 随机生成 UV
+- 从目标纹理采样 `targetRGB`
+- 用 `EvalModel` 得到预测 `predictedRGB`
+- 用 `Loss.deriv(...)` 计算 loss gradient
+- 用 `bwd_diff(EvalModel)` 做反向传播
+
+但好处是，这个函数现在是可复用的：
+
+- 任何“2 输入、3 输出”的模型都可以拿来训练
+- Slang 会自动为当前模型生成正确的前向和梯度代码
+
+### 神经模块实现
+
+这些 `IModule` 实现本质上只是对 `RTXNS` 现有函数的一层薄包装。
+
+例如 `NeuralModules.slang` 里的 `FrequencyEncoding`：
+
 ```
 struct FrequencyEncoding<
     T : __BuiltinFloatingPointType,
@@ -200,15 +277,25 @@ struct FrequencyEncoding<
     }
 }
 ```
-In its `forward` method, this calls directly to the `rtxns::EncodeFrequencyN` function. The important piece is providing the appropriate generic arguments to `IModule`, so that any code using `FrequencyEncoding` now knows about the number of inputs and outputs. We can rely on Slang AutoDiff to generate the correct gradients.
 
-We will explain the other implementations in more detail at the end of this document, but most importantly we have a `TrainableMLPModule` that has the same parameters as the `TrainingMLP`, with the addition of activations, and a `ModuleChain` that chains multiple modules together, and feeds the output of one to the next.
+它的 `forward` 只是直接调用 `rtxns::EncodeFrequencyN`。关键点在于：
 
-### Neural Modules in python
+- 要为 `IModule` 正确填写泛型参数
+- 让调用方能知道这个模块的输入输出维度
 
-`NeuralModules.slang` now lets us write arbitrary network architectures without writing any code. Instead, we can declare the whole network as a single type by combining the classes above.
+Slang AutoDiff 会自动帮你推导梯度。
 
-However, writing networks this way gets _very_ verbose. For example, reproducing the network from the [Simple Training](SimpleTraining.md) sample becomes this:
+除此之外，这里还提供了两个重要构件：
+
+- `TrainableMLPModule`
+- `ModuleChain`
+
+前者本质上是带激活函数的训练型 MLP 封装；后者则负责把多个模块按顺序串起来，让前一个模块的输出作为后一个模块的输入。
+
+### Python 侧的神经模块
+
+虽然 `NeuralModules.slang` 已经允许我们在 Slang 里定义各种架构，但直接这么写类型会很冗长。例如，如果要复现 [Simple Training](SimpleTraining.md) 里的网络，大概要写成这样：
+
 ```
 rtxns::ModuleChain<half, 2, 12, 3,
     rtxns::FrequencyEncoding<half, 2, 3>,
@@ -218,14 +305,22 @@ rtxns::ModuleChain<half, 2, 12, 3,
     >
 >
 ```
-This gets a bit tedious. However, we don't have to declare this type by hand - Python can do this for us.
 
-`NeuralModules.py` defines many of the same types as `NeuralModules.slang`, with `CoopVecModule` as the root type. The name was chosen deliberately to avoid confusion with the SlangPy `Module` or the pytorch `Module`. It defines a few useful abstract functions:
-- `@property type_name`: Returns a string corresponding to the slang type this module represents
-- `get_this()`: Returns a dictionary with the module fields. This way, a `CoopVecModule` instance can be passed directly to Slang. 
-- `parameters()`, `gradients()`: A list of parameter buffers and their gradients that will be used/produced in forward/backward, respectively
+这显然不够友好。好在 Python 可以替你生成它。
 
-With the Python modules, we can start building network architectures like the one above:
+`NeuralModules.py` 中定义了一组和 `NeuralModules.slang` 对应的 Python 类型，它们都以 `CoopVecModule` 为根基。之所以不直接叫 `Module`，是为了避免和 SlangPy 自己的 `Module` 或 PyTorch 的 `Module` 混淆。
+
+`CoopVecModule` 提供了几个重要接口：
+
+- `type_name`
+  返回这个模块对应的 Slang 类型名
+- `get_this()`
+  返回模块字段字典，使得 Python 对象可直接传给 Slang
+- `parameters()` / `gradients()`
+  返回训练时会被读取或写入的参数 buffer 和梯度 buffer 列表
+
+有了这些 Python 模块后，就能像下面这样搭建网络：
+
 ```
 encoding = FrequencyEncoding(DataType.float16, 2, 3)
 mlp_with_encoding = ModuleChain(
@@ -239,25 +334,35 @@ mlp_with_encoding = ModuleChain(
                     output_act=SigmoidAct())
 )
 ```
-This does a few things: Instantiating `TrainableMLP` creates the CoopVector buffers to store the weight/bias parameters and gradients. These can be found via `mlp_with_encoding.parameters()` and `.gradients()`, respectively. Second, we now have the type name of the model. Third, thanks to `get_this()`, we can pass `mlp_with_encoding` directly to slang functions expecting an `IModule`.
 
-For example, calling `EvalModel` can be done with
+这段代码做了几件关键事情：
+
+1. `TrainableMLP` 会创建用于存储 CoopVector 权重和梯度的 buffer
+2. 这些 buffer 可以通过 `mlp_with_encoding.parameters()` 和 `.gradients()` 取到
+3. 模型类型名已经自动生成
+4. 借助 `get_this()`，我们可以把整个 Python 对象直接传给 Slang
+
+比如，调用 `EvalModel` 时可以这样：
+
 ```
 module[f"EvalModel<{mlp_with_encoding.type_name}>"](mlp_with_encoding, ....)
 ```
-Because `EvalModel` is generic, we need to specialize it with the generic arguments first before we can call it with SlangPy. We can do this by building the function name as a string and looking it up in the Slang module with `[]`.
 
-The model architecture and its parameters are now all defined in one place: We just need to change how we construct `mlp_with_encoding`, and all the slang code needed to train it will automatically work with it. We can pass the Python object `mlp_with_encoding` directly and can rely on all the correct buffers being passed, even when we change the network architecture.
+由于 `EvalModel` 是泛型函数，因此需要先通过字符串拼出特化后的函数签名，再用 `[]` 去模块里取它。
 
-And all this without recompiling!
+这样一来，模型架构和参数都集中定义在同一个地方。你只要改 `mlp_with_encoding` 的构造方式，后面所有训练逻辑就会自动适配，而且：
 
-## Python overview
+- 不需要重编译 C++
+- 甚至不需要改 Slang 里的训练函数
 
-Now that we have an overview of how the sample works, let's look at how the sample actually runs. It process in the following steps:
+## Python 运行流程概览
 
-### Hyperparameters
+理解了整体设计之后，再来看 sample 实际是怎么跑的。
 
-After device setup, we define some hyperparameters for training such as the learning rate, size of each batch, etc. These values are a good starting point, but like any aspect of a network, can be tuned:
+### 超参数
+
+设备初始化后，首先定义一批训练超参数，比如学习率、batch 大小等。这些值只是一个起点，实际中都可以继续调：
+
 ```
     batch_shape = (256, 256)
     learning_rate = 0.005
@@ -269,9 +374,10 @@ After device setup, we define some hyperparameters for training such as the lear
     num_epochs = sample_target // (num_batches_per_epoch * math.prod(batch_shape))
 ```
 
-### Model setup
+### 模型初始化
 
-Next, we set up four different network architectures. The simplest one is a single MLP, which we can create by instantiating a `TrainableMLP`:
+接着，sample 会创建 4 种不同的网络结构。最简单的是一个基础 MLP：
+
 ```
 basic_mlp = TrainableMLP(device, DataType.float16,
                          num_hidden_layers=3,
@@ -281,9 +387,11 @@ basic_mlp = TrainableMLP(device, DataType.float16,
                          hidden_act=ReLUAct(),
                          output_act=NoneAct())
 ```
-The arguments match those of the `TrainingMLP` from `MLP.slang`. Internally, this will create a buffer to hold the CoopVector weights and sets the network weights to a random initialization.
 
-We can create more interesting architectures by chaining multiple modules together. This lets us create a network with an input encoding, for example:
+它的参数和 `MLP.slang` 中的 `TrainingMLP` 基本一致。内部会自动创建 CoopVector 参数 buffer，并执行随机初始化。
+
+如果要构造更复杂的网络，例如“输入编码 + MLP”的组合，就可以用 `ModuleChain`：
+
 ```
 encoding = FrequencyEncoding(DataType.float16, 2, 3)
 mlp_with_encoding = ModuleChain(
@@ -297,16 +405,19 @@ mlp_with_encoding = ModuleChain(
                  output_act=SigmoidAct())
 )
 ```
-`ModuleChain` takes a list of modules as input.
 
-### Setting up data generation
+`ModuleChain` 接受一个模块列表，并按顺序把它们串起来。
 
-We will generate the training data for our network by randomly sampling the reference texture. To set this up, we first need to load the texture we want to fit:
+### 训练数据生成
+
+这个 sample 通过对参考纹理做随机采样来生成训练数据。第一步先把目标纹理加载进来：
+
 ```
 target_tex = sample.load_texture("nvidia-logo.png")
 ```
 
-Next, we need to set up a random number generator. There is a simple generator implemented in `SlangpyTraining.slang`:
+然后需要一个随机数生成器。`SlangpyTraining.slang` 中提供了一个简单的 `RNG`：
+
 ```
 struct RNG
 {
@@ -316,26 +427,36 @@ struct RNG
     /* ... */
 }
 ```
-We want to pass a separate `RNG` instance for each thread in the batch. To do this, we first load the module containing `RNG`:
+
+训练时我们希望 batch 中每个线程都有自己的 `RNG` 实例。做法是：
+
+先加载包含 `RNG` 的 Slang 模块：
+
 ```
 module = Module.load_from_file(device, "SlangpyTraining.slang")
 ```
-Next, we create a random initial seed for each batch entry. We can do this with NumPy:
+
+再用 NumPy 为 batch 中每个位置生成一个随机初始种子：
+
 ```
 pcg = np.random.PCG64(seed=12345)
 seeds = pcg.random_raw(batch_shape).astype(np.uint32)
 ```
-This gives us an `ndarray` of shape `batch_shape`, filled with random integers. Finally, we run the slang constructor of `RNG` with this call:
+
+这样就得到一个形状为 `batch_shape` 的 `ndarray`。然后调用 Slang 构造函数：
+
 ```
 rng = module.RNG(seeds)
 ```
-The slang constructor takes a single `uint`, but because we pass an array of `uint`s, the constructor is vectorized and called once for each entry in `seeds`. The output value will be an `NDBuffer` of `RNG` instances, of shape `batch_shape`.
 
-### Setting up training
+虽然 Slang 构造函数只接收一个 `uint`，但因为传进去的是一个数组，SlangPy 会自动做向量化调用，最终得到一个形状同样为 `batch_shape` 的 `NDBuffer<RNG>`。
 
-Before we can set up training, we need to do a few things.
+### 训练准备
 
-First, we need to setup the optimizer. This needs the same amount of state as the [Simple Training](SimpleTraining.md) sample, but as a refresher, this is the signature of the optimizer function in `SlangpyTraining.slang` we intend to call later:
+真正开始训练之前，还需要先准备 optimizer。
+
+`SlangpyTraining.slang` 中 optimizer 的函数签名如下：
+
 ```
 void OptimizerStep(
     RWBuffer<float> moments1,
@@ -348,27 +469,37 @@ void OptimizerStep(
     float gradScale,
     int iteration)
 ```
-`paramH` and `grad` are the half precision parameters and derivatives of our model, which we can get from the model directly:
+
+其中 `paramH` 和 `grad` 分别就是模型的半精度参数和对应梯度，可以直接从模型对象拿到：
+
 ```
 grads = model.gradients()[0]
 parameters = model.parameters()[0]
 ```
-For simplicity, the sample assumes there is only one buffer of parameters in the model, and supporting multiple is left as an exercise.
 
-Next, we need to convert the half precision parameters to full precision so we don't accrue rounding errors during training. In previous samples, this required setting up an extra compute shader. With SlangPy, there's a much easier way: In `SlangpyTraining.slang`, we defined the function
+这个 sample 为了简单，假设模型里只有一块参数 buffer。支持多个参数 buffer 的情况可以自行扩展。
+
+接下来，还需要准备一份 float32 参数副本，避免训练过程中不断累积量化误差。
+
+前面的 sample 里，这通常需要额外写一段 compute shader；而在 SlangPy 里可以更简单。`SlangpyTraining.slang` 中定义了：
+
 ```
 float ConvertToFloat(half paramH)
 {
     return (float)paramH;
 }
 ```
-and we can call it with
+
+直接这样调用即可：
+
 ```
 parametersF = module.ConvertToFloat(parameters)
 ```
-It is applied to each `half` element in `parameters`, and returns a buffer of the same shape, but of type `float`. Nice!
 
-We also need to create two buffers for the optimizer moments and initialize them to zero. `NDBuffer` has a static `zeros_like` function for this that creates a zero-initialized `NDBuffer` with the same shape and dtype as an existing buffer. With this, we can set up the optimizer state:
+它会对 `parameters` 中每一个 `half` 元素逐个执行转换，并返回一个同形状的 float buffer。
+
+然后还要创建两个零初始化的 moment buffer。`NDBuffer` 提供了 `zeros_like`：
+
 ```
 optimizer_state = {
     "moments1": NDBuffer.zeros_like(parametersF),
@@ -380,29 +511,42 @@ optimizer_state = {
     "gradScale": grad_scale
 }
 ```
-You'll notice that the keys of this dictionary match up with the parameter names of the `OptimizerStep` function above. Python allows unpacking a dictionary into named parameters, and SlangPy supports this as well. This means we can call the optimizer with `OptimizerStep(**optimizer_state)`, which is a lot more convenient---of course, we still have to supply the remaining parameters of `idx` and `iteration`.
 
-Next, we fetch the Slang functions from `SlangpyTraining.slang` we intend to call in the training loop. These are the functions we need:
+这个字典的键名和 `OptimizerStep` 的参数名是对齐的，因此后续就能直接：
+
+```
+OptimizerStep(**optimizer_state)
+```
+
+当然，`idx` 和 `iteration` 这两个参数仍然需要单独传。
+
+接下来，还要从 `SlangpyTraining.slang` 中取出训练循环里真正要调用的几个函数：
+
 ```
 OptimizerStep /* ... */
 TrainTexture<Model : rtxns::IModule<half, 2, 3>, Loss : rtxns::mlp::ILoss<float, 3>> /* ... */
 EvalModel<Model: rtxns::IModule<half, 2, 3>> /* ... */
 EvalLoss<Loss : rtxns::mlp::ILoss<float, 3>> /* ... */
 ```
-`OptimizerStep` is not a generic function, and we can get it directly:
+
+其中 `OptimizerStep` 不是泛型，可以直接取：
+
 ```
 optimizer_step = module.OptimizerStep
 ```
-However, the other three take the model type or the loss type as generic parameters, and we need to specialize them (i.e. plug in our generic arguments) first. The easiest way to do this is to build the name of the specialized function with string formatting:
+
+其余几个函数带了模型类型或 loss 类型这样的泛型参数，因此需要先特化：
+
 ```
 train_texture = module[f"TrainTexture<{model.type_name}, {loss_name} >"]
 eval_model = module[f"EvalModel<{model.type_name} >"]
 eval_loss = module[f"EvalLoss<{loss_name} >"]
 ```
 
-### Main training loop
+### 主训练循环
 
-The objective of the training loop is to alternately call `train_texture` and `optimizer_step` many times until the model has converged. The simplest form look like this:
+训练循环的目标就是不断交替调用 `train_texture` 和 `optimizer_step`，直到模型收敛。最简单的形式如下：
+
 ```
 iteration = 0
 for batch in range(num_batches):
@@ -410,9 +554,11 @@ for batch in range(num_batches):
     optimizer_step(idx=call_id((num_params, )), iteration=iteration, **optimizer_state)
     iteration += 1
 ```
-The only new thing here is the `call_id(call_shape)` function. This supplies the index of the thread within the vectorized call, which we use here to index into the buffers.
 
-When doing many calls in a tight loop, it can be faster to append them to a command buffer first and dispatch them all at once. This can be done with `append_to`:
+这里唯一新的东西是 `call_id(call_shape)`，它提供当前向量化调用中的线程索引，用来访问参数 buffer。
+
+如果要在一个紧凑循环里执行很多次调用，先把它们 append 到命令缓冲区里再一次性提交，通常会更快：
+
 ```
 cmd = device.create_command_buffer()
 cmd.open()
@@ -423,28 +569,46 @@ for batch in range(num_batches_per_epoch):
 cmd.close()
 device.submit_command_buffer(cmd)
 ```
-`SlangpyTraining.py` makes one more modification, and breaks training up into _epochs_. Between each epoch, we update the screen and print out some helpful info.
 
-### After training
+`SlangpyTraining.py` 在此基础上又进一步按 **epoch** 来组织训练。每个 epoch 之间，它会刷新界面，并打印训练信息。
 
-After training is complete, the parameters of the model are stored to disk in JSON format. The `CoopVecModule` base class has a `serialize()` method for this:
+### 训练完成后
+
+训练结束后，模型参数会以 JSON 格式写到磁盘。`CoopVecModule` 基类已经提供了 `serialize()`：
+
 ```
 param_dict = best_model.serialize()
 open(weight_path, "w").write(json.dumps(param_dict, indent=4))
 ```
 
-The weights alone would not be helpful. We also need a way to save the architecture of the model to disk somehow so we can do inference on it later. The architecture is fully encoded in the type, so we could simply store the network's `type_name`.
+但光有权重还不够，还必须保存架构信息，后续推理时才能知道如何还原模型。
 
-However, there are two complications: First, we don't want to use the `TrainingMLP` for inference. Second, besides the weights, we also need a way to initialize the constants in the model. These include simple scalars like the negative slope of a `LeakyReLUAct`, but could also include more challenging fields like the parameter buffer or the CoopVec matrix/bias offsets for an `MLP`. These needs to be supplied at runtime and can't be stored to disk directly.
+理论上，模型架构完全编码在类型里，因此可以直接存 `type_name`。不过这里有两个实际问题：
 
-The approach that the sample chooses is deliberately simple. `CoopVecModule` has an `inference_type_name` property, which returns the type that should be used for inference. This is usually the same as for training, except for the MLP, which returns `InferenceMLP` instead. The module also defines a `get_initializer()` method, which returns a braced initializer string meant to be run as slang code.
+1. 推理时我们不想继续使用 `TrainingMLP`
+2. 除了权重，还需要初始化模型里的常量，例如：
+   - `LeakyReLUAct` 的负斜率
+   - MLP 的参数 buffer
+   - 权重和偏置 offset
 
-To understand what this does, let's see how it is used. The sample ultimately compiles an inference shader with the network architecture baked in, and then runs the C++ sample that loads the model and does inference on it:
+这些都属于运行时信息，不能直接原样写进静态文件。
+
+当前 sample 采取的是一种很直接、但不算特别健壮的做法：
+
+- `CoopVecModule` 提供 `inference_type_name`
+- 它返回一个用于推理的类型名
+- 对于 MLP，这通常会返回 `InferenceMLP` 而不是 `TrainingMLP`
+- 同时还提供 `get_initializer()`，返回一段 Slang 可用的 braced initializer 字符串
+
+这部分最终是这样用的：
+
 ```
 sample.compile_inference_shader(best_model)
 sample.run_sdk_inference(weight_path)
 ```
-The shader in question is `SlangpyInference.slang`, which contains this function for setting up the model:
+
+其中被编译的 shader 是 `SlangpyInference.slang`，里面通过如下方式创建模型：
+
 ```
 float3 evalModel(StructuredBuffer<half> weights, uint wo[MAX_LAYER_COUNT], uint bo[MAX_LAYER_COUNT], float2 uv)
 {
@@ -454,7 +618,14 @@ float3 evalModel(StructuredBuffer<half> weights, uint wo[MAX_LAYER_COUNT], uint 
     /* ... */
 }
 ```
-`SlangpyTraining.py` sets the defines `MODEL_TYPE` and `MODEL_INITIALIZER` to the type name and initializer list of the model that was trained. Expanding these defines for one of the architectures trained by the samples gives this:
+
+`SlangpyTraining.py` 会把训练好的模型类型和初始化器写进两个宏：
+
+- `MODEL_TYPE`
+- `MODEL_INITIALIZER`
+
+如果把其中一个 sample 训练出来的模型展开，效果大概是：
+
 ```
 float3 evalModel(StructuredBuffer<half> weights, uint wo[MAX_LAYER_COUNT], uint bo[MAX_LAYER_COUNT], float2 uv)
 {
@@ -479,13 +650,26 @@ float3 evalModel(StructuredBuffer<half> weights, uint wo[MAX_LAYER_COUNT], uint 
     /* ... */
 }
 ```
-This initializes the constants (such as the negative slope) as well as the parameter buffer and offsets that are passed in by the runtime.
 
-This approach was chosen for simplicity, but it is far from robust. For example, it assumes there are variables such as `weights` and `wo` in the surrounding scope, and would not work if there were multiple MLPs in the model. More advanced solutions are left as an exercise.
+这里会同时初始化：
 
-## Appendix: NeuralModule details
+- 激活函数常量（例如负斜率）
+- 参数 buffer
+- weight / bias offset
 
-A more complex example of an `IModule` implementation is the `TrainableMLPModule`. Breaking it down, it begins with:
+当前 sample 之所以采用这种方案，主要是为了简单。但它并不算很健壮，例如：
+
+- 默认假设周围作用域里一定有 `weights`、`wo` 这类变量
+- 如果一个模型里有多个 MLP，就不够灵活
+
+更通用的方案就留给实际项目自行扩展了。
+
+## 附录：NeuralModule 细节
+
+更复杂一点的 `IModule` 实现，是 `TrainableMLPModule`。
+
+它的开头大致如下：
+
 ```
 struct TrainableMLPModule<
     T : __BuiltinFloatingPointType,
@@ -499,9 +683,11 @@ struct TrainableMLPModule<
 > : IModule<T, InputNeurons, OutputNeurons>
 /* ... */
 ```
-This takes the same generic parameters as the `TrainingMLP` used in the [Shader Training](ShaderTraining.md) sample, with the addition of the hidden and output activations. 
 
-Internally, the module stores all the information needed to create and evaluate a `TrainingMLP`:
+它接受的泛型参数和 [Shader Training](ShaderTraining.md) 中使用的 `TrainingMLP` 基本一致，只是额外把 hidden / output activation 也纳入了模板参数。
+
+在内部，它保存了创建和执行一个 `TrainingMLP` 所需的全部信息：
+
 ```
 /* ... */
     ByteAddressBuffer parameters;
@@ -514,7 +700,8 @@ Internally, the module stores all the information needed to create and evaluate 
 /* ... */
 ```
 
-The forward method then does exactly that:
+它的 `forward` 做的事情也非常直接：
+
 ```
 /* ... */
 [BackwardDerivative(backward)]
@@ -533,13 +720,15 @@ CoopVec<T, OutputNeurons> forward(CoopVec<T, InputNeurons> inputParams)
 }
 /* ... */
 ```
-We can now use the `TrainingMLP` in any function that takes an `IModule`.
 
-#### Chaining modules
+也就是说，它只是把 `TrainingMLP` 包装成了一个满足 `IModule` 接口的模块，从而可以被更高层的泛型训练代码复用。
 
-The last piece to make `IModule` useful is a way to chain multiple modules together, so that the outputs of one feed into the next.
+#### 组合多个模块
 
-This is achieved by the `ModuleChain` type:
+为了让 `IModule` 真正实用，还必须有一种方式能把多个模块串起来，让前一层的输出成为后一层的输入。
+
+这就是 `ModuleChain` 的作用：
+
 ```
 struct ModuleChain<
     T : __BuiltinFloatingPointType,
@@ -550,9 +739,16 @@ struct ModuleChain<
     Second : IModule<T, NumHidden, NumOutputs>
 > : IModule<T, NumInputs, NumOutputs>
 ```
-It takes two other modules, `First` and `Second`. The generic constraint here guarantees that `Second` takes as many outputs as `First` produces.
 
-The rest of the implementation then is easy. `ModuleChain` stores the two modules, and the `forward` method calls the first and feeds forward the output to the second:
+它接收两个模块：
+
+- `First`
+- `Second`
+
+模板约束保证了 `Second` 的输入维度必须和 `First` 的输出维度匹配。
+
+剩下的实现就很自然了：
+
 ```
 {
     First first;
@@ -566,4 +762,10 @@ The rest of the implementation then is easy. `ModuleChain` stores the two module
     }
 }
 ```
-This only handles two modules chained together, but that is enough. To get anything more, we can nest this type. E.g. if we want to combine modules `A`, `B` and `C`, we can first chain `A` and `B` together, and then combine the resulting `ModuleChain` with `C`.
+
+它本身只能串两个模块，但这已经足够了。因为如果你想串 3 个甚至更多模块，只需要继续嵌套 `ModuleChain` 就行。例如：
+
+- 先把 `A` 和 `B` 组成一个 `ModuleChain`
+- 再把这个结果和 `C` 继续组合
+
+这样就能构建任意复杂的模型。

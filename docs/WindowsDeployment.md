@@ -1,28 +1,28 @@
-# Windows Deployment Guide
+# Windows 部署指南
 
-This guide is for a clean Windows machine that needs to clone, initialize submodules, build, and run `RTXNS` with the helper scripts included in this repository.
+这份指南面向一台全新的 Windows 机器，目标是把 `RTXNS` 克隆下来、初始化子模块、完成构建，并通过仓库内置脚本直接运行。
 
-## 1. Install prerequisites
+## 1. 安装前置依赖
 
-Install the following first:
+请先安装以下工具：
 
 - `Git`
-- `Visual Studio 2022` with the `Desktop development with C++` workload
+- `Visual Studio 2022`，并勾选 `Desktop development with C++`
 - `CMake 3.24+`
 - `DXC`
 - `Slang`
 
-Recommended local tool paths used by the scripts in this repository:
+当前仓库脚本默认使用的本地工具路径为：
 
 - `D:\Tools\DXC\dxc_2025_05_24\bin\x64\dxc.exe`
 - `D:\Tools\Slang\slang-2025.19.1-windows-x86_64\bin\slangc.exe`
 
-If you install them somewhere else, either:
+如果你把工具安装在别的位置，可以：
 
-- edit the `DXC_PATH` and `SLANG_PATH` lines at the top of [build-windows.cmd](../build-windows.cmd), or
-- set `DXC_PATH` and `SLANG_PATH` as environment variables before running the script.
+- 直接修改 [build-windows.cmd](../build-windows.cmd) 顶部的 `DXC_PATH` 和 `SLANG_PATH`
+- 或者在运行脚本前，通过环境变量覆盖
 
-PowerShell example:
+PowerShell 示例：
 
 ```powershell
 $env:DXC_PATH="D:\Tools\DXC\dxc_2025_05_24\bin\x64\dxc.exe"
@@ -30,53 +30,53 @@ $env:SLANG_PATH="D:\Tools\Slang\slang-2025.19.1-windows-x86_64\bin\slangc.exe"
 .\build-windows.cmd
 ```
 
-## 2. Clone the repository
+## 2. 克隆仓库
 
-Preferred command:
+推荐命令：
 
 ```powershell
 git clone --recursive https://github.com/MatouSakura/RTXNS.git
 cd RTXNS
 ```
 
-If the repository was already cloned without `--recursive`, run:
+如果仓库之前已经 clone 过，但没有加 `--recursive`，请运行：
 
 ```powershell
 .\setup-submodules.cmd
 ```
 
-That script runs:
+它内部执行的是：
 
 ```powershell
 git submodule sync --recursive
 git submodule update --init --recursive
 ```
 
-## 3. Build with one click
+## 3. 一键构建
 
-From the repository root:
+在仓库根目录执行：
 
 ```powershell
 .\build.bat
 ```
 
-Or, if you prefer the explicit script name:
+如果你更喜欢显式脚本名，也可以执行：
 
 ```powershell
 .\build-windows.cmd
 ```
 
-What the script does:
+脚本会自动完成以下工作：
 
-- verifies `cmake` exists
-- checks whether submodules are present and initializes them automatically if needed
-- uses your local `DXC_PATH` and `SLANG_PATH`
-- runs CMake configure
-- runs a `Release` build in parallel
+- 检查 `cmake` 是否在 `PATH` 中
+- 检查子模块是否存在，如果缺失就自动初始化
+- 使用你本地的 `DXC_PATH` 和 `SLANG_PATH`
+- 执行 CMake 配置
+- 并行构建 `Release` 版本
 
-## 4. Build manually
+## 4. 手动使用 CMake 构建
 
-If you prefer direct CMake commands:
+如果你想自己执行命令行构建，可以使用：
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
@@ -88,15 +88,15 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
 cmake --build build --config Release --parallel
 ```
 
-## 5. Output location
+## 5. 输出目录
 
-After a successful build, binaries are placed in:
+构建成功后，可执行文件默认位于：
 
 ```text
 bin\windows-x64
 ```
 
-Common sample executables include:
+常见 sample 可执行文件包括：
 
 - `SimpleInferencing.exe`
 - `SimpleTraining.exe`
@@ -104,14 +104,14 @@ Common sample executables include:
 - `SlangpyInferencing.exe`
 - `SlangpyTraining.exe`
 
-Example:
+例如：
 
 ```powershell
 cd .\bin\windows-x64
 .\SimpleInferencing.exe
 ```
 
-Or use the repository-root launcher scripts:
+你也可以直接使用仓库根目录里的启动脚本：
 
 ```powershell
 .\run-simple-inferencing.bat
@@ -119,46 +119,46 @@ Or use the repository-root launcher scripts:
 .\run-shader-training.bat
 ```
 
-To launch a sample with custom arguments such as `-dx12` or `-vk`:
+如果想带参数启动 sample，比如 `-dx12` 或 `-vk`：
 
 ```powershell
 .\run-sample.bat SimpleInferencing -vk
 ```
 
-## 6. Rebuild after editing code or shaders
+## 6. 修改代码或 shader 后如何重编译
 
-The simplest way is to run the build script again:
+最简单的方式就是再次运行：
 
 ```powershell
 .\build-windows.cmd
 ```
 
-Or rebuild directly:
+或者直接重建：
 
 ```powershell
 cmake --build build --config Release --parallel
 ```
 
-## 7. Common issues
+## 7. 常见问题
 
-### Submodules are missing
+### 子模块缺失
 
-Run:
+运行：
 
 ```powershell
 .\setup-submodules.cmd
 ```
 
-### `DXC not found` or `Slang not found`
+### 提示 `DXC not found` 或 `Slang not found`
 
-Update the paths at the top of [build-windows.cmd](../build-windows.cmd), or set:
+修改 [build-windows.cmd](../build-windows.cmd) 顶部路径，或者设置：
 
 - `DXC_PATH`
 - `SLANG_PATH`
 
-### CMake configure reused old cache data
+### CMake 缓存脏了，重复使用了旧配置
 
-Delete the `build` directory and build again:
+删除 `build` 目录后重新构建：
 
 ```powershell
 Remove-Item -Recurse -Force .\build
