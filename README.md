@@ -47,6 +47,7 @@ GPU must support the Vulkan `VK_NV_cooperative_vector` extension (minimum NVIDIA
 
 - [Quick start guide](docs/QuickStart.md) for building and running the neural shading samples.
 - [Library usage guide](docs/LibraryGuide.md) for using helper functions
+- [Neural shading architecture guide](docs/NeuralShadingArchitecture.md) for a code-oriented explanation of how the current runtime, layout conversion, inference, and training flow work.
 - [Windows deployment guide](docs/WindowsDeployment.md) for cloning, submodule initialization, one-click build, manual CMake build, and running the generated executables.
 
 For this local setup, you can also use the helper scripts from the repository root:
