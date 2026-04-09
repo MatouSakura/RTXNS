@@ -48,6 +48,8 @@ GPU must support the Vulkan `VK_NV_cooperative_vector` extension (minimum NVIDIA
 - [Quick start guide](docs/QuickStart.md) for building and running the neural shading samples.
 - [Library usage guide](docs/LibraryGuide.md) for using helper functions
 
+For this local setup, you can also run [`build-windows.cmd`](build-windows.cmd) from the repository root to execute the validated Windows `cmake configure + build` flow in one step.
+
 ### External Resources
 
 This project uses [Slang](https://shader-slang.com) and the Vulkan CoopVector extensions. The following links provide more detail on these, and other technologies which may help the reader to better understand the relevant technologies, or just to provide further reading.
