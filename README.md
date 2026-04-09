@@ -54,6 +54,8 @@ For this local setup, you can also use the helper scripts from the repository ro
 - [`setup-submodules.cmd`](setup-submodules.cmd) to sync and initialize all nested submodules.
 - [`build.bat`](build.bat) as the simplest double-click build entry on Windows.
 - [`build-windows.cmd`](build-windows.cmd) to run the validated Windows `cmake configure + build` flow in one step. If required submodules are missing, it will call `setup-submodules.cmd` automatically before configuring.
+- [`run-sample.bat`](run-sample.bat) to launch a built sample by name.
+- [`run-simple-inferencing.bat`](run-simple-inferencing.bat), [`run-simple-training.bat`](run-simple-training.bat), [`run-shader-training.bat`](run-shader-training.bat), [`run-slangpy-inferencing.bat`](run-slangpy-inferencing.bat), and [`run-slangpy-training.bat`](run-slangpy-training.bat) as direct Windows launchers for the generated sample executables.
 
 ### External Resources
 

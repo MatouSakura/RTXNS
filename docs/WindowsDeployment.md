@@ -111,6 +111,20 @@ cd .\bin\windows-x64
 .\SimpleInferencing.exe
 ```
 
+Or use the repository-root launcher scripts:
+
+```powershell
+.\run-simple-inferencing.bat
+.\run-simple-training.bat
+.\run-shader-training.bat
+```
+
+To launch a sample with custom arguments such as `-dx12` or `-vk`:
+
+```powershell
+.\run-sample.bat SimpleInferencing -vk
+```
+
 ## 6. Rebuild after editing code or shaders
 
 The simplest way is to run the build script again:
