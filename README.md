@@ -52,6 +52,7 @@ GPU must support the Vulkan `VK_NV_cooperative_vector` extension (minimum NVIDIA
 For this local setup, you can also use the helper scripts from the repository root:
 
 - [`setup-submodules.cmd`](setup-submodules.cmd) to sync and initialize all nested submodules.
+- [`build.bat`](build.bat) as the simplest double-click build entry on Windows.
 - [`build-windows.cmd`](build-windows.cmd) to run the validated Windows `cmake configure + build` flow in one step. If required submodules are missing, it will call `setup-submodules.cmd` automatically before configuring.
 
 ### External Resources

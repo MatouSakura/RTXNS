@@ -57,6 +57,12 @@ git submodule update --init --recursive
 From the repository root:
 
 ```powershell
+.\build.bat
+```
+
+Or, if you prefer the explicit script name:
+
+```powershell
 .\build-windows.cmd
 ```
 
