@@ -48,6 +48,7 @@ GPU must support the Vulkan `VK_NV_cooperative_vector` extension (minimum NVIDIA
 - [Quick start guide](docs/QuickStart.md) for building and running the neural shading samples.
 - [Library usage guide](docs/LibraryGuide.md) for using helper functions
 - [Neural shading architecture guide](docs/NeuralShadingArchitecture.md) for a code-oriented explanation of how the current runtime, layout conversion, inference, and training flow work.
+- [Volumetric cloud training guide](docs/VolumetricCloudTraining.md) for the new density-field cloud sample and its runtime entry points.
 - [Windows deployment guide](docs/WindowsDeployment.md) for cloning, submodule initialization, one-click build, manual CMake build, and running the generated executables.
 
 For this local setup, you can also use the helper scripts from the repository root:
@@ -56,7 +57,7 @@ For this local setup, you can also use the helper scripts from the repository ro
 - [`build.bat`](build.bat) as the simplest double-click build entry on Windows.
 - [`build-windows.cmd`](build-windows.cmd) to run the validated Windows `cmake configure + build` flow in one step. If required submodules are missing, it will call `setup-submodules.cmd` automatically before configuring.
 - [`run-sample.bat`](run-sample.bat) to launch a built sample by name.
-- [`run-simple-inferencing.bat`](run-simple-inferencing.bat), [`run-simple-training.bat`](run-simple-training.bat), [`run-shader-training.bat`](run-shader-training.bat), [`run-slangpy-inferencing.bat`](run-slangpy-inferencing.bat), and [`run-slangpy-training.bat`](run-slangpy-training.bat) as direct Windows launchers for the generated sample executables.
+- [`run-simple-inferencing.bat`](run-simple-inferencing.bat), [`run-simple-training.bat`](run-simple-training.bat), [`run-shader-training.bat`](run-shader-training.bat), [`run-volumetric-cloud-training.bat`](run-volumetric-cloud-training.bat), [`run-slangpy-inferencing.bat`](run-slangpy-inferencing.bat), and [`run-slangpy-training.bat`](run-slangpy-training.bat) as direct Windows launchers for the generated sample executables.
 
 ### External Resources
 

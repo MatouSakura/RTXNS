@@ -8,6 +8,7 @@ if "%~1"=="" (
     echo   SimpleInferencing
     echo   SimpleTraining
     echo   ShaderTraining
+    echo   VolumetricCloudTraining
     echo   SlangpyInferencing
     echo   SlangpyTraining
     exit /b 1

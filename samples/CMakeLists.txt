@@ -9,6 +9,7 @@
 
 add_subdirectory(SimpleInferencing)
 add_subdirectory(ShaderTraining)
+add_subdirectory(VolumetricCloudTraining)
 add_subdirectory(SimpleTraining)
 add_subdirectory(SlangpyTraining)
 add_subdirectory(SlangpyInferencing)
