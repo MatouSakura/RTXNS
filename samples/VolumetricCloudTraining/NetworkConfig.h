@@ -29,7 +29,7 @@
 static const uint THREADS_PER_GROUP_TRAIN = 64;
 static const uint THREADS_PER_GROUP_OPTIMIZE = 32;
 static const uint THREADS_PER_GROUP_CONVERT = 64;
-static const uint CLOUD_MARCH_STEPS = 72;
+static const uint CLOUD_MARCH_STEPS = 128;
 
 struct DirectConstantBufferEntry
 {

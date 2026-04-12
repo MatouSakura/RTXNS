@@ -12,10 +12,10 @@
 
 struct UIData
 {
-    float sunIntensity = 3.0f;
-    float coverage = 0.56f;
-    float densityScale = 1.35f;
-    float absorption = 1.75f;
+    float sunIntensity = 5.0f;
+    float coverage = 0.64f;
+    float densityScale = 1.28f;
+    float absorption = 1.42f;
     float time = 0.18f;
     bool animateTime = true;
 

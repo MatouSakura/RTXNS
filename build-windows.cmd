@@ -61,7 +61,7 @@ cmake -S "%REPO_ROOT%" -B "%BUILD_DIR%" -G "%GENERATOR%" -A %PLATFORM% ^
 if errorlevel 1 goto :cmake_fail
 
 echo [2/2] Building RTXNS...
-cmake --build "%BUILD_DIR%" --config %CONFIG% --parallel
+cmake --build "%BUILD_DIR%" --config %CONFIG% --parallel --clean-first
 if errorlevel 1 goto :build_fail
 
 echo.
@@ -69,6 +69,7 @@ echo Build completed successfully.
 echo Binaries:
 echo   %REPO_ROOT%\bin\windows-x64
 echo.
+echo This build uses --clean-first so imported Slang shader changes are always picked up.
 echo To rebuild after shader or source changes, run this script again.
 popd
 exit /b 0

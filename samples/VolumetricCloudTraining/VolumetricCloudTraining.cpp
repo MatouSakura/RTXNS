@@ -521,23 +521,23 @@ public:
         bool updateStat = GetDeviceManager()->GetCurrentBackBufferIndex() % g_statisticsPerFrames == 0;
 
         float3 cameraUp(0, 1, 0);
-        float3 cameraPosition(0.f, 0.55f, 3.2f);
-        float3 cameraTarget(0.f, 0.35f, 0.f);
+        float3 cameraPosition(0.f, 34.0f, -125.0f);
+        float3 cameraTarget(0.f, 23.0f, 30.0f);
         float4 viewDir(normalize(cameraTarget - cameraPosition), 0.f);
 
         DirectConstantBufferEntry directModelConstant = {};
         directModelConstant.cameraPos = float4(cameraPosition, 0.f);
         directModelConstant.lightDir = float4(normalize(m_lightDir), 0.f);
         directModelConstant.sunColor = float4(float3(1.15f, 1.05f, 0.9f) * m_uiData.sunIntensity, 0.f);
-        directModelConstant.skyColor = float4(0.48f, 0.68f, 0.95f, 0.f);
-        directModelConstant.horizonColor = float4(0.86f, 0.78f, 0.67f, 0.f);
-        directModelConstant.volumeMin = float4(-2.2f, -0.15f, -2.2f, 0.f);
-        directModelConstant.volumeMax = float4(2.2f, 1.3f, 2.2f, 0.f);
+        directModelConstant.skyColor = float4(0.30f, 0.55f, 0.92f, 0.f);
+        directModelConstant.horizonColor = float4(0.94f, 0.72f, 0.56f, 0.f);
+        directModelConstant.volumeMin = float4(0.f, 8.0f, 0.f, 0.f);
+        directModelConstant.volumeMax = float4(0.f, 42.0f, 0.f, 0.f);
         directModelConstant.time = m_uiData.time;
         directModelConstant.coverage = m_uiData.coverage;
         directModelConstant.densityScale = m_uiData.densityScale;
         directModelConstant.absorption = m_uiData.absorption;
-        directModelConstant.viewProject = affineToHomogeneous(translation(-cameraPosition) * lookatZ(-viewDir.xyz(), cameraUp)) * perspProjD3DStyle(radians(58.0f), float(width) / float(height), 0.1f, 10.f);
+        directModelConstant.viewProject = affineToHomogeneous(translation(-cameraPosition) * lookatZ(-viewDir.xyz(), cameraUp)) * perspProjD3DStyle(radians(52.0f), float(width) / float(height), 0.5f, 600.f);
         directModelConstant.viewProjectInverse = inverse(directModelConstant.viewProject);
 
         ////////////////////
@@ -747,7 +747,7 @@ private:
     RenderPass m_inferencePass;
     RenderPass m_differencePass;
 
-    float3 m_lightDir{ -0.761f, -0.467f, -0.450f };
+    float3 m_lightDir{ -0.28f, -0.20f, -0.94f };
     float2 m_currentXY;
     bool m_pressedFlag = false;
 

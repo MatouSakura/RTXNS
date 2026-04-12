@@ -33,9 +33,9 @@ void main_cs(uint3 dispatchThreadID : SV_DispatchThreadID)
     PCG32 rng = PCG32(gConst.seed, idx);
 
     float3 samplePos = float3(
-        lerp(-1.6f, 1.6f, rng.nextFloat()),
-        lerp(-0.15f, 1.25f, rng.nextFloat()),
-        lerp(-1.6f, 1.6f, rng.nextFloat()));
+        lerp(-6.0f, 6.0f, rng.nextFloat()),
+        lerp(-1.15f, 1.15f, rng.nextFloat()),
+        lerp(-6.0f, 6.0f, rng.nextFloat()));
 
     float time = rng.nextFloat();
     float coverage = lerp(0.3f, 0.82f, rng.nextFloat());

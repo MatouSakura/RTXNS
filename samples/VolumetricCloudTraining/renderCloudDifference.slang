@@ -40,11 +40,11 @@ void main_vs(
     output.pos = float4(float(u) * 2.0f - 1.0f, 1.0f - float(v) * 2.0f, 0.0f, 1.0f);
 }
 
-float3 RaymarchDirect(float3 rayOrigin, float3 rayDir)
+float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
 {
     DirectConstantBufferEntry directConstants = gConst.directConstants;
     float3 background = EvaluateSky(rayDir, directConstants.lightDir.xyz, directConstants.sunColor.rgb, directConstants.skyColor.rgb, directConstants.horizonColor.rgb);
-    float2 hit = IntersectRayBox(rayOrigin, rayDir, directConstants.volumeMin.xyz, directConstants.volumeMax.xyz);
+    float2 hit = IntersectCloudLayer(rayOrigin, rayDir, directConstants.volumeMin.y, directConstants.volumeMax.y);
 
     if (hit.x > hit.y)
     {
@@ -52,26 +52,32 @@ float3 RaymarchDirect(float3 rayOrigin, float3 rayDir)
     }
 
     float t = max(hit.x, 0.0f);
-    float tEnd = hit.y;
-    float stepSize = (tEnd - t) / CLOUD_MARCH_STEPS;
+    float tEnd = min(hit.y, t + 420.0f);
     float transmittance = 1.0f;
     float3 accumColor = 0.0f;
+    float stepSize = 1.35f;
+    t += stepSize * jitter;
 
     [loop]
     for (uint stepIndex = 0; stepIndex < CLOUD_MARCH_STEPS; ++stepIndex)
     {
-        float currentT = t + (stepIndex + 0.35f) * stepSize;
+        if (t >= tEnd)
+        {
+            break;
+        }
+
+        float currentT = t;
         float3 samplePos = rayOrigin + rayDir * currentT;
-        float density = CloudDensity(samplePos, directConstants.time, directConstants.coverage);
+        float density = CloudDensity(WorldToCloudFieldPos(samplePos), directConstants.time, directConstants.coverage);
 
         if (density > 0.001f)
         {
-            float lightDensity = CloudDensity(samplePos - directConstants.lightDir.xyz * 0.18f, directConstants.time, directConstants.coverage);
             float height01 = saturate((samplePos.y - directConstants.volumeMin.y) / max(0.001f, directConstants.volumeMax.y - directConstants.volumeMin.y));
+            float lightTransmittance = EstimateLightTransmittance(samplePos, directConstants.lightDir.xyz, directConstants.time, directConstants.coverage, directConstants.densityScale);
             float alpha = 1.0f - exp(-density * directConstants.densityScale * stepSize * directConstants.absorption);
             float3 sampleColor = ShadeCloudSample(
                 density,
-                lightDensity,
+                1.0f - lightTransmittance,
                 height01,
                 rayDir,
                 directConstants.lightDir.xyz,
@@ -88,16 +94,19 @@ float3 RaymarchDirect(float3 rayOrigin, float3 rayDir)
                 break;
             }
         }
+
+        t += stepSize;
+        stepSize *= 1.014f;
     }
 
     return accumColor + transmittance * background;
 }
 
-float3 RaymarchInference(float3 rayOrigin, float3 rayDir)
+float3 RaymarchInference(float3 rayOrigin, float3 rayDir, float jitter)
 {
     DirectConstantBufferEntry directConstants = gConst.directConstants;
     float3 background = EvaluateSky(rayDir, directConstants.lightDir.xyz, directConstants.sunColor.rgb, directConstants.skyColor.rgb, directConstants.horizonColor.rgb);
-    float2 hit = IntersectRayBox(rayOrigin, rayDir, directConstants.volumeMin.xyz, directConstants.volumeMax.xyz);
+    float2 hit = IntersectCloudLayer(rayOrigin, rayDir, directConstants.volumeMin.y, directConstants.volumeMax.y);
 
     if (hit.x > hit.y)
     {
@@ -105,18 +114,25 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir)
     }
 
     float t = max(hit.x, 0.0f);
-    float tEnd = hit.y;
-    float stepSize = (tEnd - t) / CLOUD_MARCH_STEPS;
+    float tEnd = min(hit.y, t + 420.0f);
     float transmittance = 1.0f;
     float3 accumColor = 0.0f;
+    float stepSize = 1.35f;
+    t += stepSize * jitter;
 
     [loop]
     for (uint stepIndex = 0; stepIndex < CLOUD_MARCH_STEPS; ++stepIndex)
     {
-        float currentT = t + (stepIndex + 0.35f) * stepSize;
+        if (t >= tEnd)
+        {
+            break;
+        }
+
+        float currentT = t;
         float3 samplePos = rayOrigin + rayDir * currentT;
+        float3 fieldPos = WorldToCloudFieldPos(samplePos);
         float density = CloudDensityMLP<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
-            samplePos,
+            fieldPos,
             directConstants.time,
             directConstants.coverage,
             gMLPParams,
@@ -126,18 +142,19 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir)
         if (density > 0.001f)
         {
             float lightDensity = CloudDensityMLP<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
-                samplePos - directConstants.lightDir.xyz * 0.18f,
+                WorldToCloudFieldPos(samplePos - directConstants.lightDir.xyz * 12.0f),
                 directConstants.time,
                 directConstants.coverage,
                 gMLPParams,
                 rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.weightOffsets),
                 rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.biasOffsets));
 
+            float lightTransmittance = exp(-lightDensity * directConstants.densityScale * 0.85f);
             float height01 = saturate((samplePos.y - directConstants.volumeMin.y) / max(0.001f, directConstants.volumeMax.y - directConstants.volumeMin.y));
             float alpha = 1.0f - exp(-density * directConstants.densityScale * stepSize * directConstants.absorption);
             float3 sampleColor = ShadeCloudSample(
                 density,
-                lightDensity,
+                1.0f - lightTransmittance,
                 height01,
                 rayDir,
                 directConstants.lightDir.xyz,
@@ -154,6 +171,9 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir)
                 break;
             }
         }
+
+        t += stepSize;
+        stepSize *= 1.014f;
     }
 
     return accumColor + transmittance * background;
@@ -170,9 +190,10 @@ void main_ps(
 
     float3 rayOrigin = gConst.directConstants.cameraPos.xyz;
     float3 rayDir = normalize(farPoint - rayOrigin);
+    float jitter = Hash12(input.uv + float2(gConst.directConstants.time * 3.1f, gConst.directConstants.time * 1.7f));
 
-    float3 directColor = RaymarchDirect(rayOrigin, rayDir);
-    float3 inferenceColor = RaymarchInference(rayOrigin, rayDir);
+    float3 directColor = RaymarchDirect(rayOrigin, rayDir, jitter);
+    float3 inferenceColor = RaymarchInference(rayOrigin, rayDir, jitter);
     float3 difference = abs(directColor - inferenceColor) * 5.0f;
     o_color = float4(saturate(difference + 0.03f), 1.0f);
 }
