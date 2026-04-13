@@ -58,9 +58,9 @@ float FBM(float3 p)
     return sum;
 }
 
-static const float CLOUD_WORLD_TO_FIELD_XZ = 0.018f;
-static const float CLOUD_WORLD_TO_FIELD_Y = 0.07f;
-static const float CLOUD_WORLD_CENTER_Y = 24.0f;
+static const float CLOUD_WORLD_TO_FIELD_XZ = 0.028f;
+static const float CLOUD_WORLD_TO_FIELD_Y = 0.22f;
+static const float CLOUD_WORLD_CENTER_Y = 22.0f;
 
 float3 WorldToCloudFieldPos(float3 worldPos)
 {
@@ -70,46 +70,69 @@ float3 WorldToCloudFieldPos(float3 worldPos)
         worldPos.z * CLOUD_WORLD_TO_FIELD_XZ);
 }
 
+float CloudHeightMask(float y)
+{
+    float bottom = smoothstep(-2.6f, -1.0f, y);
+    float top = 1.0f - smoothstep(0.8f, 2.0f, y);
+    float middle = 1.0f - saturate(abs(y + 0.25f) * 0.33f);
+    return saturate(bottom * top * (0.70f + 0.30f * middle));
+}
+
+float FBMCloud(float3 p, float time, int octaves)
+{
+    float3 q = p - float3(0.0f, 0.1f, 1.0f) * (time * 1.10f);
+    float sum = 0.0f;
+    float amplitude = 0.5f;
+
+    [unroll]
+    for (int octave = 0; octave < 5; ++octave)
+    {
+        if (octave >= octaves)
+        {
+            break;
+        }
+
+        sum += amplitude * ValueNoise(q);
+        q = q * 2.02f - float3(0.0f, time * 1.35f, 0.0f);
+        amplitude *= 0.5f;
+    }
+
+    return sum;
+}
+
+float3 CloudDomainWarp(float3 p, float time)
+{
+    float3 q = p * 1.35f + float3(time * 0.15f, 0.0f, -time * 0.22f);
+    float wx = FBMCloud(q + float3(7.2f, -3.6f, 1.4f), time * 0.70f, 3) - 0.5f;
+    float wy = FBMCloud(q + float3(-5.3f, 4.8f, -2.2f), time * 0.80f, 3) - 0.5f;
+    float wz = FBMCloud(q + float3(2.9f, 6.1f, 5.7f), time * 0.75f, 3) - 0.5f;
+    return float3(wx, wy * 0.55f, wz);
+}
+
+float CloudDensityLod(float3 p, float time, float coverage, int octaves)
+{
+    float2 weatherUv = p.xz * 0.40f + float2(0.0f, time * 0.16f);
+    float weather = FBM(float3(weatherUv, time * 0.06f));
+    float weatherMask = smoothstep(lerp(0.74f, 0.42f, coverage), lerp(0.98f, 0.70f, coverage), weather);
+
+    float3 warpedP = p + CloudDomainWarp(p, time) * 0.75f;
+    float baseShape = FBMCloud(warpedP * 2.10f, time * 0.95f, max(3, octaves));
+    float detail = FBMCloud(warpedP * 6.00f + float3(12.7f, 1.3f, -4.9f), time * 1.30f, min(4, octaves));
+    float erosion = FBMCloud(warpedP * 10.0f + float3(-8.1f, 2.7f, 6.3f), time * 1.75f, min(3, octaves));
+
+    float heightMask = CloudHeightMask(p.y);
+    float shape = smoothstep(0.52f, 0.88f, baseShape + detail * 0.26f);
+    shape *= weatherMask * heightMask;
+    shape -= saturate((0.62f - erosion) * 0.35f) * (1.0f - heightMask * 0.65f);
+
+    float density = saturate(shape);
+    density = saturate(pow(density, 0.82f) * lerp(0.85f, 1.35f, coverage));
+    return density;
+}
+
 float CloudDensity(float3 p, float time, float coverage)
 {
-    float height01 = saturate(p.y * 0.5f + 0.5f);
-    float flatBase = smoothstep(0.0f, 0.12f, height01);
-    float softTop = 1.0f - smoothstep(0.58f, 1.0f, height01);
-    float coreMask = saturate(1.0f - abs(height01 - 0.42f) * 1.55f);
-    float heightMask = saturate(flatBase * softTop * (0.55f + coreMask));
-    heightMask *= 1.0f - smoothstep(0.84f, 1.18f, abs(p.y));
-
-    float timeScroll = time * 1.4f;
-    float3 q = p;
-    q.xz += float2(timeScroll * 0.45f, timeScroll * 0.18f);
-    q.y *= 0.68f;
-
-    float weatherA = FBM(float3(q.x * 0.34f + 9.0f, 0.0f, q.z * 0.34f + 5.0f));
-    float weatherB = FBM(float3(q.x * 0.52f - 13.0f, q.y * 0.3f, q.z * 0.52f + 7.0f));
-    float weather = saturate((weatherA * 0.78f + weatherB * 0.32f) - lerp(0.66f, 0.22f, coverage));
-
-    float warpA = FBM(q * 0.42f + float3(11.0f, 2.0f, 17.0f));
-    float warpB = FBM(q * 0.31f + float3(3.0f, 7.0f, 13.0f));
-    q.xz += (float2(warpA, warpB) - 0.5f) * lerp(0.45f, 1.25f, weather);
-
-    float baseShape = FBM(q * 0.95f);
-    float bulkShape = FBM(q * 1.65f + float3(17.0f, 5.0f, 11.0f));
-    float detailShape = FBM(q * 3.80f + float3(37.0f, 19.0f, 23.0f));
-    float erosion = FBM(q * 7.50f + float3(61.0f, 41.0f, 29.0f));
-    float wisps = FBM(q * 11.50f + float3(83.0f, 13.0f, 47.0f));
-
-    float structure = weather * (baseShape * 0.72f + bulkShape * 0.34f);
-    structure += detailShape * 0.16f * weather;
-    structure += wisps * 0.05f * smoothstep(0.32f, 0.88f, height01);
-    structure -= erosion * lerp(0.10f, 0.34f, height01);
-    structure += 0.04f * sin(p.x * 0.55f + timeScroll * 1.3f) * sin(p.z * 0.47f - timeScroll * 0.9f);
-    structure *= heightMask;
-
-    float threshold = lerp(0.28f, 0.06f, coverage);
-    float density = smoothstep(threshold, threshold + 0.24f, structure);
-    density *= lerp(0.78f, 1.28f, smoothstep(0.18f, 0.58f, height01));
-    density *= lerp(1.10f, 0.82f, smoothstep(0.54f, 1.0f, height01));
-    return saturate(density * heightMask);
+    return CloudDensityLod(p, time, coverage, 5);
 }
 
 float2 IntersectCloudLayer(float3 rayOrigin, float3 rayDir, float layerMinY, float layerMaxY)
@@ -132,57 +155,62 @@ float2 IntersectCloudLayer(float3 rayOrigin, float3 rayDir, float layerMinY, flo
 float3 EvaluateSky(float3 rayDir, float3 lightDir, float3 sunColor, float3 skyColor, float3 horizonColor)
 {
     float skyAmount = saturate(rayDir.y * 0.5f + 0.5f);
-    float3 sky = lerp(horizonColor, skyColor, skyAmount);
-    float horizonGlow = pow(1.0f - saturate(abs(rayDir.y)), 5.0f);
-    float sunDisk = pow(saturate(dot(rayDir, -lightDir)), 64.0f);
-    float sunBloom = pow(saturate(dot(rayDir, -lightDir)), 10.0f);
-    sky += horizonColor * horizonGlow * 0.2f;
-    sky += sunColor * sunBloom * 0.12f;
-    return sky + sunColor * sunDisk * 0.35f;
+    float sunAmount = saturate(dot(rayDir, -lightDir));
+    float horizonAmount = saturate(1.0f - abs(rayDir.y) * 2.6f);
+
+    float3 zenith = skyColor * float3(0.62f, 0.70f, 0.90f);
+    float3 lower = horizonColor * float3(1.04f, 0.92f, 0.82f);
+    float3 sky = lerp(lower, zenith, smoothstep(0.0f, 0.95f, skyAmount));
+    sky += horizonColor * horizonAmount * 0.16f;
+
+    float sunBloom = pow(sunAmount, 10.0f);
+    float sunDisk = pow(sunAmount, 220.0f);
+    sky += sunColor * (sunBloom * 0.10f + sunDisk * 0.85f);
+    return sky;
+}
+
+float CloudMarchStep(float distanceToSample)
+{
+    return max(0.30f, distanceToSample * 0.006f);
+}
+
+float CloudFog(float distanceToSample)
+{
+    float fieldDistance = distanceToSample * CLOUD_WORLD_TO_FIELD_XZ;
+    return saturate(1.0f - exp(-0.16f * fieldDistance));
+}
+
+float CloudExtinction(float density, float densityScale, float absorption)
+{
+    return max(0.0f, density * densityScale * absorption * 0.90f);
 }
 
 float3 ShadeCloudSample(
     float density,
     float lightDensity,
-    float height01,
+    float distanceToSample,
+    float stepSize,
     float3 rayDir,
     float3 lightDir,
+    float3 background,
     float3 sunColor,
-    float3 skyColor,
-    float3 horizonColor,
-    float densityScale)
+    float densityScale,
+    float absorption)
 {
-    float forwardPhase = 0.35f + 0.65f * pow(saturate(dot(-rayDir, -lightDir)), 8.0f);
-    float backwardPhase = 0.2f * pow(saturate(dot(rayDir, -lightDir)), 2.0f);
-    float selfShadow = exp(-lightDensity * densityScale * 1.8f);
-    float silverLining = pow(saturate(1.0f - density), 3.0f);
+    float phase = 0.30f + 1.05f * pow(saturate(dot(rayDir, -lightDir)), 7.0f);
+    float lightTransmittance = exp(-lightDensity * densityScale * absorption * 1.25f);
+    float extinction = CloudExtinction(density, densityScale, absorption);
+    float edgeBoost = saturate(1.0f - density * 0.75f);
+    float powder = 1.0f - exp(-density * 2.2f);
 
-    float3 bodyColor = lerp(horizonColor, skyColor, saturate(height01 * 0.75f + 0.15f));
-    bodyColor = lerp(bodyColor, sunColor, 0.25f * silverLining);
+    float3 ambient = float3(0.36f, 0.45f, 0.58f);
+    float3 scattering = sunColor * (0.35f + 0.65f * phase) * lightTransmittance * (0.45f + 0.55f * powder);
+    float3 cloudTint = lerp(float3(1.08f, 1.02f, 0.94f), float3(0.66f, 0.72f, 0.80f), saturate(density * 1.35f));
+    float3 localColor = cloudTint * (ambient + scattering * (0.85f + 0.35f * edgeBoost));
 
-    float ambient = lerp(0.35f, 0.8f, height01);
-    float direct = lerp(0.25f, 1.0f, selfShadow) * (forwardPhase + backwardPhase);
-    return bodyColor * ambient + sunColor * direct * (0.45f + 0.15f * silverLining);
-}
+    localColor *= 0.70f + 0.30f * exp(-extinction * stepSize * 0.60f);
+    localColor = lerp(localColor, background, CloudFog(distanceToSample) * 0.68f);
 
-float EstimateLightTransmittance(
-    float3 worldPos,
-    float3 lightDir,
-    float time,
-    float coverage,
-    float densityScale)
-{
-    float transmittance = 1.0f;
-    float shadowStep = 8.0f;
-
-    [ForceUnroll]
-    for (int shadowStepIndex = 0; shadowStepIndex < 4; ++shadowStepIndex)
-    {
-        float stepLength = shadowStep * (1.0f + shadowStepIndex * 0.85f);
-        float3 shadowPos = worldPos - lightDir * stepLength;
-        float shadowDensity = CloudDensity(WorldToCloudFieldPos(shadowPos), time, coverage);
-        transmittance *= exp(-shadowDensity * densityScale * 0.85f);
-    }
-
-    return transmittance;
+    float stepGlow = saturate(stepSize * 0.30f) * 0.05f;
+    return localColor + sunColor * stepGlow * phase * edgeBoost;
 }

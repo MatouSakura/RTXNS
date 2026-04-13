@@ -60,8 +60,7 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir, float jitter)
 
     float transmittance = 1.0f;
     float3 accumColor = 0.0f;
-    float stepSize = 1.35f;
-    t += stepSize * jitter;
+    t += CloudMarchStep(t) * jitter;
 
     [loop]
     for (uint stepIndex = 0; stepIndex < CLOUD_MARCH_STEPS; ++stepIndex)
@@ -72,6 +71,7 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir, float jitter)
         }
 
         float currentT = t;
+        float stepSize = CloudMarchStep(currentT);
         float3 samplePos = rayOrigin + rayDir * currentT;
         float3 fieldPos = WorldToCloudFieldPos(samplePos);
         float density = CloudDensityMLP<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
@@ -82,41 +82,39 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir, float jitter)
             rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.weightOffsets),
             rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.biasOffsets));
 
-        if (density > 0.001f)
+        if (density > 0.004f)
         {
-            float lightDensity = CloudDensityMLP<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
+            float densityAhead = CloudDensityMLP<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
                 WorldToCloudFieldPos(samplePos - directConstants.lightDir.xyz * 12.0f),
                 directConstants.time,
                 directConstants.coverage,
                 gMLPParams,
                 rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.weightOffsets),
                 rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.biasOffsets));
-
-            float lightTransmittance = exp(-lightDensity * directConstants.densityScale * 0.85f);
-            float height01 = saturate((samplePos.y - directConstants.volumeMin.y) / max(0.001f, directConstants.volumeMax.y - directConstants.volumeMin.y));
-            float alpha = 1.0f - exp(-density * directConstants.densityScale * stepSize * directConstants.absorption);
+            float extinction = CloudExtinction(density, directConstants.densityScale, directConstants.absorption);
+            float alpha = saturate(1.0f - exp(-extinction * stepSize));
             float3 sampleColor = ShadeCloudSample(
                 density,
-                1.0f - lightTransmittance,
-                height01,
+                densityAhead,
+                currentT,
+                stepSize,
                 rayDir,
                 directConstants.lightDir.xyz,
+                background,
                 directConstants.sunColor.rgb,
-                directConstants.skyColor.rgb,
-                directConstants.horizonColor.rgb,
-                directConstants.densityScale);
+                directConstants.densityScale,
+                directConstants.absorption);
 
             accumColor += transmittance * alpha * sampleColor;
             transmittance *= 1.0f - alpha;
 
-            if (transmittance < 0.02f)
+            if (transmittance < 0.01f)
             {
                 break;
             }
         }
 
         t += stepSize;
-        stepSize *= 1.014f;
     }
 
     return accumColor + transmittance * background;
@@ -133,7 +131,8 @@ void main_ps(
 
     float3 rayOrigin = gConst.directConstants.cameraPos.xyz;
     float3 rayDir = normalize(farPoint - rayOrigin);
-    float jitter = Hash12(input.uv + float2(gConst.directConstants.time * 3.1f, gConst.directConstants.time * 1.7f));
+    float jitterSeed = frac(gConst.directConstants.time * 131.0f) * 71.0f;
+    float jitter = lerp(0.12f, 0.98f, Hash12(input.pos.xy + jitterSeed));
 
     o_color = float4(RaymarchInference(rayOrigin, rayDir, jitter), 1.0f);
 }

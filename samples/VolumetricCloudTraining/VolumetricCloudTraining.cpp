@@ -46,7 +46,7 @@ using namespace donut::math;
 #include "NetworkConfig.h"
 
 static const char* g_windowTitle = "RTX Neural Shading Example: Volumetric Cloud Training (Ground Truth | Neural | Error)";
-constexpr int g_viewsNum = 3;
+constexpr int g_maxViewsNum = 3;
 constexpr int g_statisticsPerFrames = 100;
 
 static std::random_device rd;
@@ -58,6 +58,7 @@ public:
     SimpleShading(app::DeviceManager* deviceManager, UserInterface& ui, rtxns::GraphicsResources& graphicsResources)
         : IRenderPass(deviceManager), m_ui(ui), m_graphicsResources(graphicsResources)
     {
+        ResetCamera();
     }
 
     bool Init()
@@ -404,26 +405,167 @@ public:
         return m_shaderFactory;
     }
 
-    bool MousePosUpdate(double xpos, double ypos) override
+    void ResetCamera()
     {
-        if (m_pressedFlag)
+        m_cameraPosition = float3(0.f, 26.0f, -120.0f);
+        m_cameraTarget = float3(0.f, 20.0f, 40.0f);
+    }
+
+    void ConsumeCameraCommands()
+    {
+        if (m_uiData.resetCamera)
         {
-            float2 delta = float2(float(xpos), float(ypos)) - m_currentXY;
-            float a, e, d;
-            cartesianToSpherical(m_lightDir, a, e, d);
-            a += delta.x * 0.01f;
-            e += delta.y * 0.01f;
-            m_lightDir = sphericalToCartesian(a, e, d);
+            ResetCamera();
+            m_uiData.resetCamera = false;
         }
 
-        m_currentXY = float2(float(xpos), float(ypos));
+        const int moveForward = m_uiData.cameraMoveForward;
+        const int moveRight = m_uiData.cameraMoveRight;
+        const int moveUp = m_uiData.cameraMoveUp;
+        m_uiData.cameraMoveForward = 0;
+        m_uiData.cameraMoveRight = 0;
+        m_uiData.cameraMoveUp = 0;
+
+        if (moveForward == 0 && moveRight == 0 && moveUp == 0)
+        {
+            return;
+        }
+
+        const float3 worldUp(0.f, 1.f, 0.f);
+        float3 forward = m_cameraTarget - m_cameraPosition;
+        forward.y = 0.f;
+
+        const float forwardLength = length(forward);
+        if (forwardLength < 1e-4f)
+        {
+            forward = float3(0.f, 0.f, 1.f);
+        }
+        else
+        {
+            forward /= forwardLength;
+        }
+
+        float3 right = cross(worldUp, forward);
+        const float rightLength = length(right);
+        if (rightLength < 1e-4f)
+        {
+            right = float3(1.f, 0.f, 0.f);
+        }
+        else
+        {
+            right /= rightLength;
+        }
+
+        float3 delta = forward * (float(moveForward) * m_uiData.cameraMoveStep);
+        delta += right * (float(moveRight) * m_uiData.cameraMoveStep);
+        delta += worldUp * (float(moveUp) * m_uiData.cameraHeightStep);
+
+        m_cameraPosition += delta;
+        m_cameraTarget += delta;
+    }
+
+    float GetCameraDistance() const
+    {
+        return length(m_cameraPosition - m_cameraTarget);
+    }
+
+    void OrbitCamera(float2 delta)
+    {
+        float azimuth, elevation, distance;
+        cartesianToSpherical(m_cameraPosition - m_cameraTarget, azimuth, elevation, distance);
+        azimuth -= delta.x * 0.008f;
+        elevation = clamp(elevation + delta.y * 0.006f, -PI_f * 0.45f, PI_f * 0.45f);
+        m_cameraPosition = m_cameraTarget + sphericalToCartesian(azimuth, elevation, distance);
+    }
+
+    void PanCamera(float2 delta)
+    {
+        const float distance = max(1.0f, GetCameraDistance());
+        const float panScale = distance * 0.0025f;
+        float3 forward = normalize(m_cameraTarget - m_cameraPosition);
+        float3 right = normalize(cross(forward, float3(0.f, 1.f, 0.f)));
+        float3 up = normalize(cross(right, forward));
+        float3 translation = (-right * delta.x + up * delta.y) * panScale;
+        m_cameraPosition += translation;
+        m_cameraTarget += translation;
+    }
+
+    void ZoomCamera(float wheelDelta)
+    {
+        float3 offset = m_cameraPosition - m_cameraTarget;
+        float distance = length(offset);
+        if (distance < 1e-4f)
+        {
+            offset = float3(0.f, 10.f, -10.f);
+            distance = length(offset);
+        }
+
+        const float zoomFactor = pow(0.88f, wheelDelta);
+        distance = clamp(distance * zoomFactor, 18.0f, 480.0f);
+        m_cameraPosition = m_cameraTarget + normalize(offset) * distance;
+    }
+
+    bool MousePosUpdate(double xpos, double ypos) override
+    {
+        float2 newPos = float2(float(xpos), float(ypos));
+        float2 delta = newPos - m_currentXY;
+
+        if (m_mouseOrbiting)
+        {
+            OrbitCamera(delta);
+        }
+        else if (m_mousePanning)
+        {
+            PanCamera(delta);
+        }
+
+        m_currentXY = newPos;
+        return m_mouseOrbiting || m_mousePanning;
+    }
+
+    bool MouseScrollUpdate(double xoffset, double yoffset) override
+    {
+        if (yoffset == 0.0)
+        {
+            return false;
+        }
+
+        ZoomCamera(float(yoffset));
         return true;
     }
 
     bool MouseButtonUpdate(int button, int action, int mods) override
     {
-        m_pressedFlag = action == 1;
-        return true;
+        const bool pressed = (action == GLFW_PRESS);
+        if (pressed)
+        {
+            double xpos = 0.0;
+            double ypos = 0.0;
+            glfwGetCursorPos(GetDeviceManager()->GetWindow(), &xpos, &ypos);
+            m_currentXY = float2(float(xpos), float(ypos));
+        }
+
+        if (button == GLFW_MOUSE_BUTTON_LEFT)
+        {
+            m_mouseOrbiting = pressed;
+            if (pressed)
+            {
+                m_mousePanning = false;
+            }
+            return true;
+        }
+
+        if (button == GLFW_MOUSE_BUTTON_RIGHT)
+        {
+            m_mousePanning = pressed;
+            if (pressed)
+            {
+                m_mouseOrbiting = false;
+            }
+            return true;
+        }
+
+        return false;
     }
 
     void Animate(float seconds) override
@@ -510,34 +652,35 @@ public:
 
     void Render(nvrhi::IFramebuffer* framebuffer) override
     {
+        ConsumeCameraCommands();
+
         std::uniform_int_distribution<uint64_t> ldist;
         uint64_t seed = ldist(rd);
 
         const nvrhi::FramebufferInfoEx& fbinfo = framebuffer->getFramebufferInfo();
         const float height = float(fbinfo.height);
-        const float width = height;
+        const int activeViews = m_uiData.showErrorView ? 3 : 2;
+        const float width = float(fbinfo.width) / float(activeViews);
 
         // Update statistics every g_statisticsPerFrames frames
         bool updateStat = GetDeviceManager()->GetCurrentBackBufferIndex() % g_statisticsPerFrames == 0;
 
         float3 cameraUp(0, 1, 0);
-        float3 cameraPosition(0.f, 34.0f, -125.0f);
-        float3 cameraTarget(0.f, 23.0f, 30.0f);
-        float4 viewDir(normalize(cameraTarget - cameraPosition), 0.f);
+        float4 viewDir(normalize(m_cameraTarget - m_cameraPosition), 0.f);
 
         DirectConstantBufferEntry directModelConstant = {};
-        directModelConstant.cameraPos = float4(cameraPosition, 0.f);
+        directModelConstant.cameraPos = float4(m_cameraPosition, 0.f);
         directModelConstant.lightDir = float4(normalize(m_lightDir), 0.f);
-        directModelConstant.sunColor = float4(float3(1.15f, 1.05f, 0.9f) * m_uiData.sunIntensity, 0.f);
-        directModelConstant.skyColor = float4(0.30f, 0.55f, 0.92f, 0.f);
-        directModelConstant.horizonColor = float4(0.94f, 0.72f, 0.56f, 0.f);
-        directModelConstant.volumeMin = float4(0.f, 8.0f, 0.f, 0.f);
-        directModelConstant.volumeMax = float4(0.f, 42.0f, 0.f, 0.f);
+        directModelConstant.sunColor = float4(float3(1.00f, 0.95f, 0.85f) * m_uiData.sunIntensity, 0.f);
+        directModelConstant.skyColor = float4(0.49f, 0.61f, 0.82f, 0.f);
+        directModelConstant.horizonColor = float4(0.95f, 0.74f, 0.56f, 0.f);
+        directModelConstant.volumeMin = float4(0.f, 10.0f, 0.f, 0.f);
+        directModelConstant.volumeMax = float4(0.f, 36.0f, 0.f, 0.f);
         directModelConstant.time = m_uiData.time;
         directModelConstant.coverage = m_uiData.coverage;
         directModelConstant.densityScale = m_uiData.densityScale;
         directModelConstant.absorption = m_uiData.absorption;
-        directModelConstant.viewProject = affineToHomogeneous(translation(-cameraPosition) * lookatZ(-viewDir.xyz(), cameraUp)) * perspProjD3DStyle(radians(52.0f), float(width) / float(height), 0.5f, 600.f);
+        directModelConstant.viewProject = affineToHomogeneous(translation(-m_cameraPosition) * lookatZ(-viewDir.xyz(), cameraUp)) * perspProjD3DStyle(radians(48.0f), float(width) / float(height), 0.5f, 700.f);
         directModelConstant.viewProjectInverse = inverse(directModelConstant.viewProject);
 
         ////////////////////
@@ -649,7 +792,7 @@ public:
         nvrhi::utils::ClearColorAttachment(m_commandList, framebuffer, 0, nvrhi::Color(0.f));
 
         RenderPass* passes[] = { &m_directPass, &m_inferencePass, &m_differencePass };
-        for (int viewIndex = 0; viewIndex < g_viewsNum; ++viewIndex)
+        for (int viewIndex = 0; viewIndex < activeViews; ++viewIndex)
         {
             nvrhi::TimerQueryHandle timer;
             if (viewIndex < 2 && updateStat)
@@ -747,9 +890,12 @@ private:
     RenderPass m_inferencePass;
     RenderPass m_differencePass;
 
-    float3 m_lightDir{ -0.28f, -0.20f, -0.94f };
+    float3 m_lightDir{ -0.62f, -0.22f, -0.75f };
+    float3 m_cameraPosition;
+    float3 m_cameraTarget;
     float2 m_currentXY;
-    bool m_pressedFlag = false;
+    bool m_mouseOrbiting = false;
+    bool m_mousePanning = false;
 
     nvrhi::BufferHandle m_vertexBuffer;
     nvrhi::BufferHandle m_indexBuffer;
@@ -829,7 +975,7 @@ int main(int __argc, const char** __argv)
     std::unique_ptr<app::DeviceManager> deviceManager(app::DeviceManager::Create(graphicsApi));
 
     app::DeviceCreationParameters deviceParams;
-    deviceParams.backBufferWidth = deviceParams.backBufferHeight * g_viewsNum;
+    deviceParams.backBufferWidth = deviceParams.backBufferHeight * g_maxViewsNum;
 
 #ifdef _DEBUG
     deviceParams.enableDebugRuntime = true;

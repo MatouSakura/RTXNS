@@ -31,13 +31,63 @@ void UIWidget::Draw()
     ImGui::SliderFloat("Time", &m_uiData.time, 0.f, 1.f);
     ImGui::Checkbox("Animate Time", &m_uiData.animateTime);
 
+    ImGui::SeparatorText("Camera");
+    ImGui::SliderFloat("Move Step", &m_uiData.cameraMoveStep, 2.0f, 40.0f, "%.1f");
+    ImGui::SliderFloat("Height Step", &m_uiData.cameraHeightStep, 1.0f, 20.0f, "%.1f");
+    ImGui::TextUnformatted("Mouse: L drag orbit, R drag pan, Wheel zoom");
+
+    ImGui::PushButtonRepeat(true);
+    if (ImGui::Button("Rise"))
+    {
+        m_uiData.cameraMoveUp += 1;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Fall"))
+    {
+        m_uiData.cameraMoveUp -= 1;
+    }
+    ImGui::PopButtonRepeat();
+
+    const float arrowOffset = 34.0f;
+    ImGui::PushButtonRepeat(true);
+    ImGui::Dummy(ImVec2(arrowOffset, 0.0f));
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##cam_up", ImGuiDir_Up))
+    {
+        m_uiData.cameraMoveForward += 1;
+    }
+
+    if (ImGui::ArrowButton("##cam_left", ImGuiDir_Left))
+    {
+        m_uiData.cameraMoveRight -= 1;
+    }
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##cam_down", ImGuiDir_Down))
+    {
+        m_uiData.cameraMoveForward -= 1;
+    }
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##cam_right", ImGuiDir_Right))
+    {
+        m_uiData.cameraMoveRight += 1;
+    }
+    ImGui::PopButtonRepeat();
+
+    if (ImGui::Button("Reset Camera"))
+    {
+        m_uiData.resetCamera = true;
+    }
+
     ImGui::Text("Epochs : %d", m_uiData.epochs);
     ImGui::Text("Training Time : %.2f s", m_uiData.trainingTime);
+    ImGui::Text("Training: %s", m_uiData.training ? "ON" : "OFF");
 
-    if (ImGui::Button(m_uiData.training ? "Disable Training" : "Enable Training"))
+    if (ImGui::Button(m_uiData.training ? "Stop Training" : "Start Training"))
     {
         m_uiData.training = !m_uiData.training;
     }
+
+    ImGui::Checkbox("Show Error View (Perf Cost)", &m_uiData.showErrorView);
 
     if (ImGui::Button("Reset Training"))
     {

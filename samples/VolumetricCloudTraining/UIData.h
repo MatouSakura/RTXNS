@@ -10,20 +10,30 @@
 
 #pragma once
 
+#include <string>
+
 struct UIData
 {
-    float sunIntensity = 5.0f;
-    float coverage = 0.64f;
-    float densityScale = 1.28f;
-    float absorption = 1.42f;
-    float time = 0.18f;
+    float sunIntensity = 1.20f;
+    float coverage = 0.62f;
+    float densityScale = 1.45f;
+    float absorption = 1.25f;
+    float time = 0.22f;
     bool animateTime = true;
 
     float trainingTime = 0.0f;
     uint32_t epochs = 0;
 
     bool reset = false;
-    bool training = true;
+    bool training = false;
     bool load = false;
     std::string fileName;
+
+    float cameraMoveStep = 12.0f;
+    float cameraHeightStep = 6.0f;
+    int cameraMoveForward = 0;
+    int cameraMoveRight = 0;
+    int cameraMoveUp = 0;
+    bool resetCamera = false;
+    bool showErrorView = false;
 };

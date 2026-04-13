@@ -34,7 +34,7 @@ void main_cs(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     float3 samplePos = float3(
         lerp(-6.0f, 6.0f, rng.nextFloat()),
-        lerp(-1.15f, 1.15f, rng.nextFloat()),
+        lerp(-3.0f, 2.0f, rng.nextFloat()),
         lerp(-6.0f, 6.0f, rng.nextFloat()));
 
     float time = rng.nextFloat();

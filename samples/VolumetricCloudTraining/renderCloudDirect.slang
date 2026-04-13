@@ -52,8 +52,7 @@ float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
 
     float transmittance = 1.0f;
     float3 accumColor = 0.0f;
-    float stepSize = 1.35f;
-    t += stepSize * jitter;
+    t += CloudMarchStep(t) * jitter;
 
     [loop]
     for (uint stepIndex = 0; stepIndex < CLOUD_MARCH_STEPS; ++stepIndex)
@@ -64,36 +63,37 @@ float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
         }
 
         float currentT = t;
+        float stepSize = CloudMarchStep(currentT);
         float3 samplePos = rayOrigin + rayDir * currentT;
         float density = CloudDensity(WorldToCloudFieldPos(samplePos), gConst.time, gConst.coverage);
 
-        if (density > 0.001f)
+        if (density > 0.004f)
         {
-            float height01 = saturate((samplePos.y - gConst.volumeMin.y) / max(0.001f, gConst.volumeMax.y - gConst.volumeMin.y));
-            float lightTransmittance = EstimateLightTransmittance(samplePos, gConst.lightDir.xyz, gConst.time, gConst.coverage, gConst.densityScale);
-            float alpha = 1.0f - exp(-density * gConst.densityScale * stepSize * gConst.absorption);
+            float densityAhead = CloudDensity(WorldToCloudFieldPos(samplePos - gConst.lightDir.xyz * 12.0f), gConst.time, gConst.coverage);
+            float extinction = CloudExtinction(density, gConst.densityScale, gConst.absorption);
+            float alpha = saturate(1.0f - exp(-extinction * stepSize));
             float3 sampleColor = ShadeCloudSample(
                 density,
-                1.0f - lightTransmittance,
-                height01,
+                densityAhead,
+                currentT,
+                stepSize,
                 rayDir,
                 gConst.lightDir.xyz,
+                background,
                 gConst.sunColor.rgb,
-                gConst.skyColor.rgb,
-                gConst.horizonColor.rgb,
-                gConst.densityScale);
+                gConst.densityScale,
+                gConst.absorption);
 
             accumColor += transmittance * alpha * sampleColor;
             transmittance *= 1.0f - alpha;
 
-            if (transmittance < 0.02f)
+            if (transmittance < 0.01f)
             {
                 break;
             }
         }
 
         t += stepSize;
-        stepSize *= 1.014f;
     }
 
     return accumColor + transmittance * background;
@@ -110,7 +110,8 @@ void main_ps(
 
     float3 rayOrigin = gConst.cameraPos.xyz;
     float3 rayDir = normalize(farPoint - rayOrigin);
-    float jitter = Hash12(input.uv + float2(gConst.time * 3.1f, gConst.time * 1.7f));
+    float jitterSeed = frac(gConst.time * 131.0f) * 71.0f;
+    float jitter = lerp(0.12f, 0.98f, Hash12(input.pos.xy + jitterSeed));
 
     o_color = float4(RaymarchDirect(rayOrigin, rayDir, jitter), 1.0f);
 }
