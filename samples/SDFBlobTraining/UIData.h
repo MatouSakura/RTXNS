@@ -20,12 +20,13 @@ struct UIData
     float absorption = 1.20f;
     float time = 0.10f;
     bool animateTime = true;
+    bool unlit = false;
 
     float trainingTime = 0.0f;
     uint32_t epochs = 0;
 
     bool reset = false;
-    bool training = true;
+    bool training = false;
     bool load = false;
     std::string fileName;
 
@@ -35,5 +36,6 @@ struct UIData
     int cameraMoveRight = 0;
     int cameraMoveUp = 0;
     bool resetCamera = false;
-    bool showErrorView = true;
+    bool showNeuralView = false;
+    bool showErrorView = false;
 };

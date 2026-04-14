@@ -30,6 +30,7 @@ void UIWidget::Draw()
     ImGui::SliderFloat("Emission", &m_uiData.absorption, 0.0f, 3.f);
     ImGui::SliderFloat("Time", &m_uiData.time, 0.f, 1.f);
     ImGui::Checkbox("Animate Time", &m_uiData.animateTime);
+    ImGui::Checkbox("Unlit (Emissive Only)", &m_uiData.unlit);
 
     ImGui::SeparatorText("Camera");
     ImGui::SliderFloat("Move Step", &m_uiData.cameraMoveStep, 0.2f, 8.0f, "%.2f");
@@ -87,6 +88,7 @@ void UIWidget::Draw()
         m_uiData.training = !m_uiData.training;
     }
 
+    ImGui::Checkbox("Show Neural View", &m_uiData.showNeuralView);
     ImGui::Checkbox("Show Error View (Perf Cost)", &m_uiData.showErrorView);
 
     if (ImGui::Button("Reset Training"))

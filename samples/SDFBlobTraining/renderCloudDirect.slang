@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2015 - 2025, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
@@ -47,6 +47,11 @@ float3 RenderSdfGroundTruth(float3 rayOrigin, float3 rayDir, float jitter)
 
         if (sdf < SDF_HIT_EPS)
         {
+            if (gConst.unlitAndPadding.x > 0.5f)
+            {
+                float3 unlit = ShadeBlobEmissive(p, gConst.time, gConst.coverage, gConst.absorption);
+                return lerp(unlit, sky, SdfDistanceFog(t));
+            }
             float3 n = EstimateSdfNormal(p, gConst.time, gConst.coverage);
             float3 lit = ShadeBlobSurface(
                 p,
@@ -59,7 +64,8 @@ float3 RenderSdfGroundTruth(float3 rayOrigin, float3 rayDir, float jitter)
                 gConst.skyColor.rgb,
                 gConst.horizonColor.rgb,
                 gConst.densityScale,
-                gConst.absorption);
+                gConst.absorption,
+                gConst.unlitAndPadding.x);
             return lerp(lit, sky, SdfDistanceFog(t));
         }
 

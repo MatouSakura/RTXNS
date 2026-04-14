@@ -659,7 +659,7 @@ public:
 
         const nvrhi::FramebufferInfoEx& fbinfo = framebuffer->getFramebufferInfo();
         const float height = float(fbinfo.height);
-        const int activeViews = m_uiData.showErrorView ? 3 : 2;
+        const int activeViews = m_uiData.showNeuralView ? (m_uiData.showErrorView ? 3 : 2) : 1;
         const float width = float(fbinfo.width) / float(activeViews);
 
         // Update statistics every g_statisticsPerFrames frames
@@ -680,6 +680,7 @@ public:
         directModelConstant.coverage = m_uiData.coverage;
         directModelConstant.densityScale = m_uiData.densityScale;
         directModelConstant.absorption = m_uiData.absorption;
+        directModelConstant.unlitAndPadding = float4(m_uiData.unlit ? 1.0f : 0.0f, 0.f, 0.f, 0.f);
         directModelConstant.viewProject = affineToHomogeneous(translation(-m_cameraPosition) * lookatZ(-viewDir.xyz(), cameraUp)) * perspProjD3DStyle(radians(52.0f), float(width) / float(height), 0.1f, 120.f);
         directModelConstant.viewProjectInverse = inverse(directModelConstant.viewProject);
 

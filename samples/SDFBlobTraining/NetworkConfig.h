@@ -17,7 +17,7 @@
 #define HIDDEN_NEURONS 64
 #define NUM_HIDDEN_LAYERS 4
 #define BATCH_SIZE (1 << 15)
-#define BATCH_COUNT 112
+#define BATCH_COUNT 32
 
 #define LEARNING_RATE 0.0010f
 #define COMPONENT_WEIGHTS float1(1.f)
@@ -29,7 +29,9 @@
 static const uint THREADS_PER_GROUP_TRAIN = 64;
 static const uint THREADS_PER_GROUP_OPTIMIZE = 32;
 static const uint THREADS_PER_GROUP_CONVERT = 64;
-static const uint CLOUD_MARCH_STEPS = 128;
+static const uint CLOUD_MARCH_STEPS = 64;
+static const uint NEURAL_MARCH_STEPS = 56;
+static const float NEURAL_HIT_EPS = 0.0045f;
 
 struct DirectConstantBufferEntry
 {
@@ -48,6 +50,7 @@ struct DirectConstantBufferEntry
     float coverage = 0;
     float densityScale = 0;
     float absorption = 0;
+    float4 unlitAndPadding = float4(0, 0, 0, 0);
 };
 
 struct InferenceConstantBufferEntry

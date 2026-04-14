@@ -131,9 +131,24 @@ float SdfTraceStep(float sdfValue)
     return clamp(abs(sdfValue) * 0.82f, 0.01f, 0.48f);
 }
 
+float SdfTraceStepNeural(float sdfValue)
+{
+    // Conservative stepping for neural SDF to reduce surface overstep artifacts.
+    return clamp(abs(sdfValue) * 0.62f, 0.008f, 0.32f);
+}
+
 float SdfDistanceFog(float distanceToHit)
 {
     return saturate(1.0f - exp(-0.035f * distanceToHit));
+}
+
+float3 ShadeBlobEmissive(float3 position, float time, float coverage, float emissiveCtrl)
+{
+    float tone = 0.50f + 0.50f * sin(time * 6.2831853f + position.x * 1.4f + position.z * 1.1f);
+    float surfaceSdf = abs(BlobSceneSdf(position, time, coverage));
+    float edgeGlow = exp(-surfaceSdf * 8.0f) * saturate(emissiveCtrl / 3.0f);
+    float3 emissive = float3(0.25f, 0.45f, 0.90f) * edgeGlow * (0.45f + 0.55f * tone);
+    return emissive * 1.85f;
 }
 
 float3 ShadeBlobSurface(
@@ -147,8 +162,19 @@ float3 ShadeBlobSurface(
     float3 skyColor,
     float3 horizonColor,
     float specularCtrl,
-    float emissiveCtrl)
+    float emissiveCtrl,
+    float unlitCtrl)
 {
+    float tone = 0.50f + 0.50f * sin(time * 6.2831853f + position.x * 1.4f + position.z * 1.1f);
+    float3 baseColor = lerp(float3(0.34f, 0.54f, 0.94f), float3(0.76f, 0.86f, 1.00f), tone);
+
+    float3 unlitColor = ShadeBlobEmissive(position, time, coverage, emissiveCtrl);
+    if (unlitCtrl > 0.5f)
+    {
+        return unlitColor;
+    }
+    float3 emissive = unlitColor / 1.85f;
+
     float3 L = normalize(-lightDir);
     float NdotL = saturate(dot(normal, L));
     float3 H = normalize(L - rayDir);
@@ -159,13 +185,6 @@ float3 ShadeBlobSurface(
     float specPower = lerp(20.0f, 120.0f, saturate(specularCtrl / 3.0f));
     float spec = pow(NdotH, specPower) * (0.16f + 0.55f * saturate(specularCtrl / 3.0f));
     float fresnel = pow(1.0f - VdotN, 4.0f);
-
-    float tone = 0.50f + 0.50f * sin(time * 6.2831853f + position.x * 1.4f + position.z * 1.1f);
-    float3 baseColor = lerp(float3(0.34f, 0.54f, 0.94f), float3(0.76f, 0.86f, 1.00f), tone);
-
-    float surfaceSdf = abs(BlobSceneSdf(position, time, coverage));
-    float edgeGlow = exp(-surfaceSdf * 8.0f) * saturate(emissiveCtrl / 3.0f);
-    float3 emissive = float3(0.25f, 0.45f, 0.90f) * edgeGlow * (0.45f + 0.55f * tone);
 
     float3 lighting = baseColor * (0.18f + 0.82f * NdotL * shadow);
     lighting += sunColor * spec * shadow;

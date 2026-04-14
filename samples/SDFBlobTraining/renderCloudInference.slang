@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2015 - 2025, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
@@ -48,7 +48,7 @@ float3 RenderSdfNeural(float3 rayOrigin, float3 rayDir, float jitter)
 
     float t = 0.08f + jitter * 0.10f;
     [loop]
-    for (uint i = 0; i < CLOUD_MARCH_STEPS; ++i)
+    for (uint i = 0; i < NEURAL_MARCH_STEPS; ++i)
     {
         float3 p = rayOrigin + rayDir * t;
         float sdf = PredictSdfMLPSafe<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
@@ -59,8 +59,13 @@ float3 RenderSdfNeural(float3 rayOrigin, float3 rayDir, float jitter)
             rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.weightOffsets),
             rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.biasOffsets));
 
-        if (sdf < SDF_HIT_EPS)
+        if (sdf < NEURAL_HIT_EPS)
         {
+            if (directConstants.unlitAndPadding.x > 0.5f)
+            {
+                float3 unlit = ShadeBlobEmissive(p, directConstants.time, directConstants.coverage, directConstants.absorption);
+                return lerp(unlit, sky, SdfDistanceFog(t));
+            }
             float3 n = EstimateSdfNormal(p, directConstants.time, directConstants.coverage);
             float3 lit = ShadeBlobSurface(
                 p,
@@ -73,11 +78,12 @@ float3 RenderSdfNeural(float3 rayOrigin, float3 rayDir, float jitter)
                 directConstants.skyColor.rgb,
                 directConstants.horizonColor.rgb,
                 directConstants.densityScale,
-                directConstants.absorption);
+                directConstants.absorption,
+                directConstants.unlitAndPadding.x);
             return lerp(lit, sky, SdfDistanceFog(t));
         }
 
-        t += SdfTraceStep(sdf);
+        t += SdfTraceStepNeural(sdf);
         if (t > SDF_MAX_DISTANCE)
             break;
     }
