@@ -56,7 +56,7 @@ float3 RenderSdfDirect(float3 rayOrigin, float3 rayDir, float jitter)
             if (dc.unlitAndPadding.x > 0.5f)
             {
                 float3 unlit = ShadeBlobEmissive(p, dc.time, dc.coverage, dc.absorption);
-                return lerp(unlit, sky, SdfDistanceFog(t));
+                return CompositeSdfSurface(unlit, sky, t, dc.unlitAndPadding.y);
             }
             float3 n = EstimateSdfNormal(p, dc.time, dc.coverage);
             float3 lit = ShadeBlobSurface(
@@ -72,7 +72,7 @@ float3 RenderSdfDirect(float3 rayOrigin, float3 rayDir, float jitter)
                 dc.densityScale,
                 dc.absorption,
                 dc.unlitAndPadding.x);
-            return lerp(lit, sky, SdfDistanceFog(t));
+            return CompositeSdfSurface(lit, sky, t, dc.unlitAndPadding.y);
         }
 
         t += SdfTraceStep(sdf);
@@ -106,7 +106,7 @@ float3 RenderSdfNeural(float3 rayOrigin, float3 rayDir, float jitter)
             if (dc.unlitAndPadding.x > 0.5f)
             {
                 float3 unlit = ShadeBlobEmissive(p, dc.time, dc.coverage, dc.absorption);
-                return lerp(unlit, sky, SdfDistanceFog(t));
+                return CompositeSdfSurface(unlit, sky, t, dc.unlitAndPadding.y);
             }
             float3 n = EstimateSdfNormal(p, dc.time, dc.coverage);
             float3 lit = ShadeBlobSurface(
@@ -122,7 +122,7 @@ float3 RenderSdfNeural(float3 rayOrigin, float3 rayDir, float jitter)
                 dc.densityScale,
                 dc.absorption,
                 dc.unlitAndPadding.x);
-            return lerp(lit, sky, SdfDistanceFog(t));
+            return CompositeSdfSurface(lit, sky, t, dc.unlitAndPadding.y);
         }
 
         t += SdfTraceStepNeural(sdf);

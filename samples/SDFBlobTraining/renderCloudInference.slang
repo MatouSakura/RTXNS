@@ -64,7 +64,7 @@ float3 RenderSdfNeural(float3 rayOrigin, float3 rayDir, float jitter)
             if (directConstants.unlitAndPadding.x > 0.5f)
             {
                 float3 unlit = ShadeBlobEmissive(p, directConstants.time, directConstants.coverage, directConstants.absorption);
-                return lerp(unlit, sky, SdfDistanceFog(t));
+                return CompositeSdfSurface(unlit, sky, t, directConstants.unlitAndPadding.y);
             }
             float3 n = EstimateSdfNormal(p, directConstants.time, directConstants.coverage);
             float3 lit = ShadeBlobSurface(
@@ -80,7 +80,7 @@ float3 RenderSdfNeural(float3 rayOrigin, float3 rayDir, float jitter)
                 directConstants.densityScale,
                 directConstants.absorption,
                 directConstants.unlitAndPadding.x);
-            return lerp(lit, sky, SdfDistanceFog(t));
+            return CompositeSdfSurface(lit, sky, t, directConstants.unlitAndPadding.y);
         }
 
         t += SdfTraceStepNeural(sdf);

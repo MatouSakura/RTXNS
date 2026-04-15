@@ -18,6 +18,7 @@ struct UIData
     float coverage = 0.55f;
     float densityScale = 1.35f;
     float absorption = 1.20f;
+    float opacity = 0.55f;
     float time = 0.10f;
     bool animateTime = true;
     bool unlit = false;

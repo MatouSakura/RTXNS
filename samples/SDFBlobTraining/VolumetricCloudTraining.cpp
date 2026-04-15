@@ -680,7 +680,7 @@ public:
         directModelConstant.coverage = m_uiData.coverage;
         directModelConstant.densityScale = m_uiData.densityScale;
         directModelConstant.absorption = m_uiData.absorption;
-        directModelConstant.unlitAndPadding = float4(m_uiData.unlit ? 1.0f : 0.0f, 0.f, 0.f, 0.f);
+        directModelConstant.unlitAndPadding = float4(m_uiData.unlit ? 1.0f : 0.0f, m_uiData.opacity, 0.f, 0.f);
         directModelConstant.viewProject = affineToHomogeneous(translation(-m_cameraPosition) * lookatZ(-viewDir.xyz(), cameraUp)) * perspProjD3DStyle(radians(52.0f), float(width) / float(height), 0.1f, 120.f);
         directModelConstant.viewProjectInverse = inverse(directModelConstant.viewProject);
 

@@ -28,6 +28,7 @@ void UIWidget::Draw()
     ImGui::SliderFloat("Blob Blend", &m_uiData.coverage, 0.2f, 0.9f);
     ImGui::SliderFloat("Specular", &m_uiData.densityScale, 0.2f, 3.f);
     ImGui::SliderFloat("Emission", &m_uiData.absorption, 0.0f, 3.f);
+    ImGui::SliderFloat("Opacity", &m_uiData.opacity, 0.05f, 1.0f);
     ImGui::SliderFloat("Time", &m_uiData.time, 0.f, 1.f);
     ImGui::Checkbox("Animate Time", &m_uiData.animateTime);
     ImGui::Checkbox("Unlit (Emissive Only)", &m_uiData.unlit);

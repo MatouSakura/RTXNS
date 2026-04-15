@@ -142,6 +142,13 @@ float SdfDistanceFog(float distanceToHit)
     return saturate(1.0f - exp(-0.035f * distanceToHit));
 }
 
+float3 CompositeSdfSurface(float3 surfaceColor, float3 skyColor, float distanceToHit, float opacity)
+{
+    float surfaceAlpha = saturate(opacity);
+    float3 layered = lerp(skyColor, surfaceColor, surfaceAlpha);
+    return lerp(layered, skyColor, SdfDistanceFog(distanceToHit));
+}
+
 float3 ShadeBlobEmissive(float3 position, float time, float coverage, float emissiveCtrl)
 {
     float tone = 0.50f + 0.50f * sin(time * 6.2831853f + position.x * 1.4f + position.z * 1.1f);
