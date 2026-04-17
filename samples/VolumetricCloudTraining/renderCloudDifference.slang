@@ -43,24 +43,29 @@ void main_vs(
 float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
 {
     DirectConstantBufferEntry directConstants = gConst.directConstants;
-    float3 background = EvaluateSky(rayDir, directConstants.lightDir.xyz, directConstants.sunColor.rgb, directConstants.skyColor.rgb, directConstants.horizonColor.rgb);
-    float2 hit = IntersectCloudLayer(rayOrigin, rayDir, directConstants.volumeMin.y, directConstants.volumeMax.y);
+    CloudRaymarchContext context = InitCloudRaymarch(
+        rayOrigin,
+        rayDir,
+        directConstants.lightDir.xyz,
+        directConstants.sunColor.rgb,
+        directConstants.skyColor.rgb,
+        directConstants.horizonColor.rgb,
+        directConstants.volumeMin.xyz,
+        directConstants.volumeMax.xyz);
 
-    if (hit.x > hit.y)
+    if (!context.valid)
     {
-        return background;
+        return context.background;
     }
 
-    float t = max(hit.x, 0.0f);
-    float tEnd = min(hit.y, t + 420.0f);
     float transmittance = 1.0f;
     float3 accumColor = 0.0f;
-    t += CloudMarchStep(t) * jitter;
+    float t = context.tStart + CloudMarchStep(context.tStart) * jitter;
 
     [loop]
     for (uint stepIndex = 0; stepIndex < CLOUD_MARCH_STEPS; ++stepIndex)
     {
-        if (t >= tEnd)
+        if (t >= context.tEnd)
         {
             break;
         }
@@ -70,27 +75,24 @@ float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
         float3 samplePos = rayOrigin + rayDir * currentT;
         float density = CloudDensity(WorldToCloudFieldPos(samplePos), directConstants.time, directConstants.coverage);
 
-        if (density > 0.004f)
+        if (CloudHasVisibleDensity(density))
         {
-            float densityAhead = CloudDensity(WorldToCloudFieldPos(samplePos - directConstants.lightDir.xyz * 12.0f), directConstants.time, directConstants.coverage);
-            float extinction = CloudExtinction(density, directConstants.densityScale, directConstants.absorption);
-            float alpha = saturate(1.0f - exp(-extinction * stepSize));
-            float3 sampleColor = ShadeCloudSample(
+            float densityAhead = CloudDensity(WorldToCloudFieldPos(samplePos - directConstants.lightDir.xyz * CLOUD_LIGHT_PROBE_DISTANCE), directConstants.time, directConstants.coverage);
+            CloudAccumulateStep(
                 density,
                 densityAhead,
                 currentT,
                 stepSize,
                 rayDir,
                 directConstants.lightDir.xyz,
-                background,
+                context.background,
                 directConstants.sunColor.rgb,
                 directConstants.densityScale,
-                directConstants.absorption);
+                directConstants.absorption,
+                transmittance,
+                accumColor);
 
-            accumColor += transmittance * alpha * sampleColor;
-            transmittance *= 1.0f - alpha;
-
-            if (transmittance < 0.01f)
+            if (CloudShouldTerminate(transmittance))
             {
                 break;
             }
@@ -99,30 +101,35 @@ float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
         t += stepSize;
     }
 
-    return accumColor + transmittance * background;
+    return ComposeCloudColor(accumColor, transmittance, context.background);
 }
 
 float3 RaymarchInference(float3 rayOrigin, float3 rayDir, float jitter)
 {
     DirectConstantBufferEntry directConstants = gConst.directConstants;
-    float3 background = EvaluateSky(rayDir, directConstants.lightDir.xyz, directConstants.sunColor.rgb, directConstants.skyColor.rgb, directConstants.horizonColor.rgb);
-    float2 hit = IntersectCloudLayer(rayOrigin, rayDir, directConstants.volumeMin.y, directConstants.volumeMax.y);
+    CloudRaymarchContext context = InitCloudRaymarch(
+        rayOrigin,
+        rayDir,
+        directConstants.lightDir.xyz,
+        directConstants.sunColor.rgb,
+        directConstants.skyColor.rgb,
+        directConstants.horizonColor.rgb,
+        directConstants.volumeMin.xyz,
+        directConstants.volumeMax.xyz);
 
-    if (hit.x > hit.y)
+    if (!context.valid)
     {
-        return background;
+        return context.background;
     }
 
-    float t = max(hit.x, 0.0f);
-    float tEnd = min(hit.y, t + 420.0f);
     float transmittance = 1.0f;
     float3 accumColor = 0.0f;
-    t += CloudMarchStep(t) * jitter;
+    float t = context.tStart + CloudMarchStep(context.tStart) * jitter;
 
     [loop]
     for (uint stepIndex = 0; stepIndex < CLOUD_MARCH_STEPS; ++stepIndex)
     {
-        if (t >= tEnd)
+        if (t >= context.tEnd)
         {
             break;
         }
@@ -131,7 +138,7 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir, float jitter)
         float stepSize = CloudMarchStep(currentT);
         float3 samplePos = rayOrigin + rayDir * currentT;
         float3 fieldPos = WorldToCloudFieldPos(samplePos);
-        float density = CloudDensityMLP<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
+        float density = CloudDensityMLPSafe<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
             fieldPos,
             directConstants.time,
             directConstants.coverage,
@@ -139,33 +146,30 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir, float jitter)
             rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.weightOffsets),
             rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.biasOffsets));
 
-        if (density > 0.004f)
+        if (CloudHasVisibleDensity(density))
         {
-            float densityAhead = CloudDensityMLP<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
-                WorldToCloudFieldPos(samplePos - directConstants.lightDir.xyz * 12.0f),
+            float densityAhead = CloudDensityMLPSafe<NUM_HIDDEN_LAYERS, HIDDEN_NEURONS>(
+                WorldToCloudFieldPos(samplePos - directConstants.lightDir.xyz * CLOUD_LIGHT_PROBE_DISTANCE),
                 directConstants.time,
                 directConstants.coverage,
                 gMLPParams,
                 rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.weightOffsets),
                 rtxns::UnpackArray<NUM_TRANSITIONS_ALIGN4, NUM_TRANSITIONS>(gConst.biasOffsets));
-            float extinction = CloudExtinction(density, directConstants.densityScale, directConstants.absorption);
-            float alpha = saturate(1.0f - exp(-extinction * stepSize));
-            float3 sampleColor = ShadeCloudSample(
+            CloudAccumulateStep(
                 density,
                 densityAhead,
                 currentT,
                 stepSize,
                 rayDir,
                 directConstants.lightDir.xyz,
-                background,
+                context.background,
                 directConstants.sunColor.rgb,
                 directConstants.densityScale,
-                directConstants.absorption);
+                directConstants.absorption,
+                transmittance,
+                accumColor);
 
-            accumColor += transmittance * alpha * sampleColor;
-            transmittance *= 1.0f - alpha;
-
-            if (transmittance < 0.01f)
+            if (CloudShouldTerminate(transmittance))
             {
                 break;
             }
@@ -174,7 +178,7 @@ float3 RaymarchInference(float3 rayOrigin, float3 rayDir, float jitter)
         t += stepSize;
     }
 
-    return accumColor + transmittance * background;
+    return ComposeCloudColor(accumColor, transmittance, context.background);
 }
 
 [shader("fragment")]
@@ -191,8 +195,8 @@ void main_ps(
     float jitterSeed = frac(gConst.directConstants.time * 131.0f) * 71.0f;
     float jitter = lerp(0.12f, 0.98f, Hash12(input.pos.xy + jitterSeed));
 
-    float3 directColor = RaymarchDirect(rayOrigin, rayDir, jitter);
-    float3 inferenceColor = RaymarchInference(rayOrigin, rayDir, jitter);
+    float3 directColor = ApplyCloudPost(RaymarchDirect(rayOrigin, rayDir, jitter));
+    float3 inferenceColor = ApplyCloudPost(RaymarchInference(rayOrigin, rayDir, jitter));
     float3 difference = abs(directColor - inferenceColor) * 5.0f;
     o_color = float4(saturate(difference + 0.03f), 1.0f);
 }

@@ -17,7 +17,7 @@
 #define HIDDEN_NEURONS 64
 #define NUM_HIDDEN_LAYERS 4
 #define BATCH_SIZE (1 << 15)
-#define BATCH_COUNT 96
+#define BATCH_COUNT 64
 
 #define LEARNING_RATE 0.0008f
 #define COMPONENT_WEIGHTS float1(1.f)
@@ -29,7 +29,7 @@
 static const uint THREADS_PER_GROUP_TRAIN = 64;
 static const uint THREADS_PER_GROUP_OPTIMIZE = 32;
 static const uint THREADS_PER_GROUP_CONVERT = 64;
-static const uint CLOUD_MARCH_STEPS = 144;
+static const uint CLOUD_MARCH_STEPS = 64;
 
 struct DirectConstantBufferEntry
 {

@@ -15,9 +15,9 @@
 struct UIData
 {
     float sunIntensity = 1.20f;
-    float coverage = 0.62f;
-    float densityScale = 1.45f;
-    float absorption = 1.25f;
+    float coverage = 0.55f;
+    float densityScale = 1.10f;
+    float absorption = 1.00f;
     float time = 0.22f;
     bool animateTime = true;
 
@@ -25,15 +25,16 @@ struct UIData
     uint32_t epochs = 0;
 
     bool reset = false;
-    bool training = false;
+    bool training = true;
     bool load = false;
     std::string fileName;
 
-    float cameraMoveStep = 12.0f;
-    float cameraHeightStep = 6.0f;
+    float cameraMoveStep = 0.20f;
+    float cameraHeightStep = 0.12f;
     int cameraMoveForward = 0;
     int cameraMoveRight = 0;
     int cameraMoveUp = 0;
     bool resetCamera = false;
-    bool showErrorView = false;
+    bool showNeuralView = true;
+    bool showErrorView = true;
 };

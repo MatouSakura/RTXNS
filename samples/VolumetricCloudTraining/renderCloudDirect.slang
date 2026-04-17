@@ -35,29 +35,29 @@ void main_vs(
 
 float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
 {
-    float3 background = EvaluateSky(rayDir, gConst.lightDir.xyz, gConst.sunColor.rgb, gConst.skyColor.rgb, gConst.horizonColor.rgb);
-    float2 hit = IntersectCloudLayer(rayOrigin, rayDir, gConst.volumeMin.y, gConst.volumeMax.y);
+    CloudRaymarchContext context = InitCloudRaymarch(
+        rayOrigin,
+        rayDir,
+        gConst.lightDir.xyz,
+        gConst.sunColor.rgb,
+        gConst.skyColor.rgb,
+        gConst.horizonColor.rgb,
+        gConst.volumeMin.xyz,
+        gConst.volumeMax.xyz);
 
-    if (hit.x > hit.y)
+    if (!context.valid)
     {
-        return background;
-    }
-
-    float t = max(hit.x, 0.0f);
-    float tEnd = min(hit.y, t + 420.0f);
-    if (tEnd <= t)
-    {
-        return background;
+        return context.background;
     }
 
     float transmittance = 1.0f;
     float3 accumColor = 0.0f;
-    t += CloudMarchStep(t) * jitter;
+    float t = context.tStart + CloudMarchStep(context.tStart) * jitter;
 
     [loop]
     for (uint stepIndex = 0; stepIndex < CLOUD_MARCH_STEPS; ++stepIndex)
     {
-        if (t >= tEnd)
+        if (t >= context.tEnd)
         {
             break;
         }
@@ -67,27 +67,24 @@ float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
         float3 samplePos = rayOrigin + rayDir * currentT;
         float density = CloudDensity(WorldToCloudFieldPos(samplePos), gConst.time, gConst.coverage);
 
-        if (density > 0.004f)
+        if (CloudHasVisibleDensity(density))
         {
-            float densityAhead = CloudDensity(WorldToCloudFieldPos(samplePos - gConst.lightDir.xyz * 12.0f), gConst.time, gConst.coverage);
-            float extinction = CloudExtinction(density, gConst.densityScale, gConst.absorption);
-            float alpha = saturate(1.0f - exp(-extinction * stepSize));
-            float3 sampleColor = ShadeCloudSample(
+            float densityAhead = CloudDensity(WorldToCloudFieldPos(samplePos - gConst.lightDir.xyz * CLOUD_LIGHT_PROBE_DISTANCE), gConst.time, gConst.coverage);
+            CloudAccumulateStep(
                 density,
                 densityAhead,
                 currentT,
                 stepSize,
                 rayDir,
                 gConst.lightDir.xyz,
-                background,
+                context.background,
                 gConst.sunColor.rgb,
                 gConst.densityScale,
-                gConst.absorption);
+                gConst.absorption,
+                transmittance,
+                accumColor);
 
-            accumColor += transmittance * alpha * sampleColor;
-            transmittance *= 1.0f - alpha;
-
-            if (transmittance < 0.01f)
+            if (CloudShouldTerminate(transmittance))
             {
                 break;
             }
@@ -96,7 +93,7 @@ float3 RaymarchDirect(float3 rayOrigin, float3 rayDir, float jitter)
         t += stepSize;
     }
 
-    return accumColor + transmittance * background;
+    return ComposeCloudColor(accumColor, transmittance, context.background);
 }
 
 [shader("fragment")]
@@ -113,5 +110,6 @@ void main_ps(
     float jitterSeed = frac(gConst.time * 131.0f) * 71.0f;
     float jitter = lerp(0.12f, 0.98f, Hash12(input.pos.xy + jitterSeed));
 
-    o_color = float4(RaymarchDirect(rayOrigin, rayDir, jitter), 1.0f);
+    float3 color = RaymarchDirect(rayOrigin, rayDir, jitter);
+    o_color = float4(ApplyCloudPost(color), 1.0f);
 }

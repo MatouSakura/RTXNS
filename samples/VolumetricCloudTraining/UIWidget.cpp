@@ -32,8 +32,8 @@ void UIWidget::Draw()
     ImGui::Checkbox("Animate Time", &m_uiData.animateTime);
 
     ImGui::SeparatorText("Camera");
-    ImGui::SliderFloat("Move Step", &m_uiData.cameraMoveStep, 2.0f, 40.0f, "%.1f");
-    ImGui::SliderFloat("Height Step", &m_uiData.cameraHeightStep, 1.0f, 20.0f, "%.1f");
+    ImGui::SliderFloat("Move Step", &m_uiData.cameraMoveStep, 0.02f, 2.0f, "%.2f");
+    ImGui::SliderFloat("Height Step", &m_uiData.cameraHeightStep, 0.02f, 1.5f, "%.2f");
     ImGui::TextUnformatted("Mouse: L drag orbit, R drag pan, Wheel zoom");
 
     ImGui::PushButtonRepeat(true);
@@ -87,6 +87,7 @@ void UIWidget::Draw()
         m_uiData.training = !m_uiData.training;
     }
 
+    ImGui::Checkbox("Show Neural View", &m_uiData.showNeuralView);
     ImGui::Checkbox("Show Error View (Perf Cost)", &m_uiData.showErrorView);
 
     if (ImGui::Button("Reset Training"))

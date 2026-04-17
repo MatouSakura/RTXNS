@@ -38,6 +38,7 @@
 #include <fstream>
 #include <random>
 #include <numeric>
+#include <array>
 #include <format>
 
 using namespace donut;
@@ -407,8 +408,8 @@ public:
 
     void ResetCamera()
     {
-        m_cameraPosition = float3(0.f, 26.0f, -120.0f);
-        m_cameraTarget = float3(0.f, 20.0f, 40.0f);
+        m_cameraPosition = float3(1.65f, 0.15f, -1.75f);
+        m_cameraTarget = float3(0.0f, 0.05f, 0.0f);
     }
 
     void ConsumeCameraCommands()
@@ -657,9 +658,33 @@ public:
         std::uniform_int_distribution<uint64_t> ldist;
         uint64_t seed = ldist(rd);
 
+        enum class ViewType
+        {
+            GroundTruth,
+            Neural,
+            Error
+        };
+
+        struct ActiveView
+        {
+            RenderPass* pass = nullptr;
+            ViewType type = ViewType::GroundTruth;
+        };
+
+        std::array<ActiveView, g_maxViewsNum> activeViewsLayout = {};
+        int activeViews = 0;
+        activeViewsLayout[activeViews++] = { &m_directPass, ViewType::GroundTruth };
+        if (m_uiData.showNeuralView)
+        {
+            activeViewsLayout[activeViews++] = { &m_inferencePass, ViewType::Neural };
+        }
+        if (m_uiData.showErrorView)
+        {
+            activeViewsLayout[activeViews++] = { &m_differencePass, ViewType::Error };
+        }
+
         const nvrhi::FramebufferInfoEx& fbinfo = framebuffer->getFramebufferInfo();
         const float height = float(fbinfo.height);
-        const int activeViews = m_uiData.showErrorView ? 3 : 2;
         const float width = float(fbinfo.width) / float(activeViews);
 
         // Update statistics every g_statisticsPerFrames frames
@@ -671,16 +696,16 @@ public:
         DirectConstantBufferEntry directModelConstant = {};
         directModelConstant.cameraPos = float4(m_cameraPosition, 0.f);
         directModelConstant.lightDir = float4(normalize(m_lightDir), 0.f);
-        directModelConstant.sunColor = float4(float3(1.00f, 0.95f, 0.85f) * m_uiData.sunIntensity, 0.f);
+        directModelConstant.sunColor = float4(float3(2.00f, 1.60f, 0.90f) * m_uiData.sunIntensity, 0.f);
         directModelConstant.skyColor = float4(0.49f, 0.61f, 0.82f, 0.f);
         directModelConstant.horizonColor = float4(0.95f, 0.74f, 0.56f, 0.f);
-        directModelConstant.volumeMin = float4(0.f, 10.0f, 0.f, 0.f);
-        directModelConstant.volumeMax = float4(0.f, 36.0f, 0.f, 0.f);
+        directModelConstant.volumeMin = float4(-1.30f, -0.55f, -1.30f, 0.f);
+        directModelConstant.volumeMax = float4(1.30f, 0.55f, 1.30f, 0.f);
         directModelConstant.time = m_uiData.time;
         directModelConstant.coverage = m_uiData.coverage;
         directModelConstant.densityScale = m_uiData.densityScale;
         directModelConstant.absorption = m_uiData.absorption;
-        directModelConstant.viewProject = affineToHomogeneous(translation(-m_cameraPosition) * lookatZ(-viewDir.xyz(), cameraUp)) * perspProjD3DStyle(radians(48.0f), float(width) / float(height), 0.5f, 700.f);
+        directModelConstant.viewProject = affineToHomogeneous(translation(-m_cameraPosition) * lookatZ(-viewDir.xyz(), cameraUp)) * perspProjD3DStyle(radians(56.0f), float(width) / float(height), 0.02f, 32.f);
         directModelConstant.viewProjectInverse = inverse(directModelConstant.viewProject);
 
         ////////////////////
@@ -791,18 +816,19 @@ public:
 
         nvrhi::utils::ClearColorAttachment(m_commandList, framebuffer, 0, nvrhi::Color(0.f));
 
-        RenderPass* passes[] = { &m_directPass, &m_inferencePass, &m_differencePass };
         for (int viewIndex = 0; viewIndex < activeViews; ++viewIndex)
         {
+            const ActiveView& activeView = activeViewsLayout[viewIndex];
+            auto& pass = *activeView.pass;
+
             nvrhi::TimerQueryHandle timer;
-            if (viewIndex < 2 && updateStat)
+            const bool shouldProfileView = (activeView.type == ViewType::GroundTruth || activeView.type == ViewType::Neural);
+            if (shouldProfileView && updateStat)
             {
-                timer = viewIndex == 0 ? m_disneyTimer.Get() : m_neuralTimer.Get();
+                timer = activeView.type == ViewType::GroundTruth ? m_disneyTimer.Get() : m_neuralTimer.Get();
                 GetDevice()->resetTimerQuery(timer);
                 m_commandList->beginTimerQuery(timer);
             }
-
-            auto& pass = *passes[viewIndex];
 
             if (!pass.pipeline)
             {
@@ -817,7 +843,7 @@ public:
                 pass.pipeline = GetDevice()->createGraphicsPipeline(psoDesc, framebuffer->getFramebufferInfo());
             }
 
-            if (viewIndex == 0)
+            if (activeView.type == ViewType::GroundTruth)
             {
                 m_commandList->writeBuffer(pass.constantBuffer, &directModelConstant, sizeof(directModelConstant));
             }
@@ -846,7 +872,7 @@ public:
             args.vertexCount = 4;
             m_commandList->draw(args);
 
-            if (viewIndex < 2 && updateStat)
+            if (shouldProfileView && updateStat)
             {
                 m_commandList->endTimerQuery(timer);
             }
